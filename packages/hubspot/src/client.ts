@@ -92,11 +92,12 @@ class HubSpotClient implements HubSpotPort {
   async search(object: ObjectType, request: SearchRequest): Promise<SearchPage> {
     // Search lags behind writes. Never use Search to confirm something you just wrote. The ledger does that.
     const filters = (request.filters ?? []).map((filter) => {
-      const entry: Record<string, string> = {
+      const entry: Record<string, unknown> = {
         propertyName: filter.property,
         operator: filter.operator,
       };
       if (filter.value !== undefined) entry.value = filter.value;
+      if (filter.values !== undefined) entry.values = filter.values;
       return entry;
     });
     const payload: Record<string, unknown> = {};
@@ -521,6 +522,7 @@ function propertyPayload(property: PropertyDefinition): Record<string, unknown> 
     groupName: property.groupName,
   };
   if (property.description) payload.description = property.description;
+  if (property.hasUniqueValue !== undefined) payload.hasUniqueValue = property.hasUniqueValue;
   if (property.options?.length) {
     payload.options = property.options.map((option, index) => ({
       label: option.label,

@@ -428,6 +428,8 @@ function matchesFilter(properties: Record<string, string | null>, filter: Search
     case 'CONTAINS_TOKEN':
       if (value == null || !filter.value) return false;
       return value.toLowerCase().includes(filter.value.toLowerCase());
+    case 'IN':
+      return value != null && (filter.values ?? []).includes(value);
     default:
       return false;
   }

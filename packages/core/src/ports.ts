@@ -14,8 +14,10 @@ export interface CrmRecord {
 
 export interface SearchFilter {
   property: string;
-  operator: 'EQ' | 'NEQ' | 'LT' | 'LTE' | 'GT' | 'GTE' | 'CONTAINS_TOKEN' | 'HAS_PROPERTY' | 'NOT_HAS_PROPERTY';
+  operator: 'EQ' | 'NEQ' | 'LT' | 'LTE' | 'GT' | 'GTE' | 'CONTAINS_TOKEN' | 'HAS_PROPERTY' | 'NOT_HAS_PROPERTY' | 'IN';
   value?: string;
+  /** HubSpot IN accepts at most 100 values. */
+  values?: string[];
 }
 
 export interface SearchRequest {
@@ -40,6 +42,8 @@ export interface PropertyDefinition {
   groupName: string;
   description?: string;
   options?: { label: string; value: string }[];
+  /** Required for batch upsert id properties. Engagements often reject this. */
+  hasUniqueValue?: boolean;
 }
 
 export interface HubSpotOwner {

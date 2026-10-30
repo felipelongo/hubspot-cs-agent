@@ -1,26 +1,42 @@
-import type { CrmRecord, HubSpotPort, ObjectType, RecordRef, SeedDatabase, UpsertInput } from '@cs-agent/core';
+import type { CrmRecord, HubSpotPort, ObjectType, Pipeline, RecordRef, SeedDatabase, UpsertInput } from '@cs-agent/core';
 import type { PortalConfig } from '@cs-agent/config';
+import { ensureSeedProperties } from './seed-properties.js';
 import { setupPortal } from './services.js';
 
 const SEEDED_OBJECTS: ObjectType[] = ['company', 'contact', 'deal', 'ticket', 'note', 'email', 'meeting', 'call', 'task'];
+const ACTIVITY_OBJECTS = ['note', 'email', 'meeting', 'call'] as const;
 const ID_PROPERTY = 'seed_external_id';
 const OWNER_PROPERTY = 'hubspot_owner_id';
+const FIXTURE_PIPELINE = 'renewals';
+const SEARCH_LIMIT = 100;
 
 export async function seedHubSpot(hubspot: HubSpotPort, portal: PortalConfig, database: SeedDatabase): Promise<string> {
   const mapped = await mapFixtureOwners(hubspot, database.owners);
   const setup = await setupPortal(hubspot, portal);
+  const propertiesCreated = await ensureSeedProperties(hubspot, database);
+  const renewal = await ensureRenewalPipeline(hubspot, portal);
   const ids = new Map<string, string>();
   const companies = await upsert(hubspot, 'company', rewriteOwnerIds(database.companies, mapped.ids), ids);
   const contacts = await upsert(hubspot, 'contact', rewriteOwnerIds(database.contacts, mapped.ids), ids);
-  const deals = await upsert(hubspot, 'deal', rewriteOwnerIds(database.deals, mapped.ids), ids);
-  const tickets = await upsert(hubspot, 'ticket', rewriteOwnerIds(database.tickets, mapped.ids), ids);
+  const deals = await upsert(
+    hubspot,
+    'deal',
+    rewriteDeals(rewriteOwnerIds(database.deals, mapped.ids), renewal.pipeline),
+    ids,
+  );
+  const tickets = await upsert(
+    hubspot,
+    'ticket',
+    await rewriteTickets(hubspot, rewriteOwnerIds(database.tickets, mapped.ids)),
+    ids,
+  );
   const activityCounts: Record<string, number> = {};
-  for (const object of ['note', 'email', 'meeting', 'call'] as const) {
+  for (const object of ACTIVITY_OBJECTS) {
     const rows = rewriteOwnerIds(
       database.activities.filter((activity) => activity.object === object),
       mapped.ids,
     );
-    const written = await upsert(hubspot, object, rows, ids);
+    const written = await writeActivities(hubspot, object, rows, ids);
     activityCounts[object] = written.length;
   }
   let associations = 0;
@@ -32,6 +48,7 @@ export async function seedHubSpot(hubspot: HubSpotPort, portal: PortalConfig, da
   return [
     `Setup created ${setup.created.length}, unchanged ${setup.unchanged.length}, findings ${setup.findings.length}.`,
     ...setup.findings.map((finding) => `  finding: ${finding}`),
+    `Properties created ${propertiesCreated}. Pipeline ${renewal.created ? 'created' : 'unchanged'}.`,
     `Owners: ${mapped.matched} matched by email, ${mapped.fallback} fell back to the token's user.`,
     `Upserted companies ${companies.length}, contacts ${contacts.length}, deals ${deals.length}, tickets ${tickets.length}, activities ${activityTotal}.`,
     `Associations ${associations}.`,
@@ -70,18 +87,143 @@ async function upsert(
     const chunk = inputs.slice(index, index + 100);
     const records = await hubspot.batchUpsert(object, chunk);
     records.forEach((record, offset) => {
-      const source = rows[index + offset];
-      const external = record.properties[ID_PROPERTY] || source?.properties[ID_PROPERTY] || source?.id;
-      if (external) {
-        ids.set(`${object}:${external}`, record.ref.id);
-        ids.set(external, record.ref.id);
-      }
-      if (source) ids.set(`${object}:${source.id}`, record.ref.id);
-      ids.set(`${object}:${record.ref.id}`, record.ref.id);
+      remember(ids, object, record, rows[index + offset]);
     });
     written.push(...records);
   }
   return written;
+}
+
+async function ensureRenewalPipeline(
+  hubspot: HubSpotPort,
+  portal: PortalConfig,
+): Promise<{ created: boolean; pipeline: Pipeline }> {
+  const wanted = portal.renewal_pipeline;
+  const ensured = await hubspot.ensurePipeline('deal', {
+    label: wanted.name,
+    stages: wanted.stages.map((label) => ({ label })),
+  });
+  if (ensured.missingStages.length > 0) {
+    throw new Error(
+      `Renewal pipeline "${wanted.name}" is missing stage "${ensured.missingStages.join('", "')}".`,
+    );
+  }
+  const pipelines = await hubspot.listPipelines('deal');
+  const pipeline =
+    pipelines.find((item) => item.id === ensured.pipelineId) ?? pipelines.find((item) => item.label === wanted.name);
+  if (!pipeline) throw new Error(`Renewal pipeline "${wanted.name}" was not found after ensure.`);
+  return { created: ensured.created, pipeline };
+}
+
+function rewriteDeals<T extends { properties: Record<string, string> }>(rows: T[], pipeline: Pipeline): T[] {
+  return rows.map((row) => {
+    const properties = { ...row.properties };
+    if (properties.pipeline === FIXTURE_PIPELINE) properties.pipeline = pipeline.id;
+    const stageLabel = properties.dealstage;
+    if (!stageLabel) return { ...row, properties };
+    const stage = pipeline.stages.find((item) => item.label === stageLabel);
+    if (!stage) throw new Error(`Renewal pipeline "${pipeline.label}" is missing stage "${stageLabel}".`);
+    properties.dealstage = stage.id;
+    return { ...row, properties };
+  });
+}
+
+async function rewriteTickets<T extends { properties: Record<string, string> }>(
+  hubspot: HubSpotPort,
+  rows: T[],
+): Promise<T[]> {
+  const missing = rows.filter((row) => !row.properties.hs_pipeline);
+  if (missing.length === 0) return rows;
+  const stageIds = new Set<string>();
+  for (const row of missing) {
+    const stage = row.properties.hs_pipeline_stage;
+    if (stage) stageIds.add(stage);
+  }
+  const pipelines = await hubspot.listPipelines('ticket');
+  const matches = pipelines.filter((pipeline) =>
+    [...stageIds].every((id) => pipeline.stages.some((stage) => stage.id === id)),
+  );
+  const chosen = matches.find((pipeline) => pipeline.id === '0') ?? matches[0];
+  if (!chosen) {
+    const listed = [...stageIds].join(', ');
+    throw new Error(
+      listed ? `No ticket pipeline includes stages ${listed}.` : 'No ticket pipeline includes the fixture stages.',
+    );
+  }
+  return rows.map((row) => {
+    if (row.properties.hs_pipeline) return row;
+    return { ...row, properties: { ...row.properties, hs_pipeline: chosen.id } };
+  });
+}
+
+async function writeActivities(
+  hubspot: HubSpotPort,
+  object: ObjectType,
+  rows: { id: string; properties: Record<string, string> }[],
+  ids: Map<string, string>,
+): Promise<CrmRecord[]> {
+  if (rows.length === 0) return [];
+  const written: CrmRecord[] = [];
+  for (let index = 0; index < rows.length; index += SEARCH_LIMIT) {
+    const chunk = rows.slice(index, index + SEARCH_LIMIT);
+    const externalIds = chunk.map((row) => row.properties[ID_PROPERTY] || row.id);
+    const found = await searchByExternalIds(hubspot, object, externalIds);
+    const byExternal = new Map<string, CrmRecord>();
+    for (const record of found) {
+      const external = record.properties[ID_PROPERTY];
+      if (external && !byExternal.has(external)) byExternal.set(external, record);
+    }
+    for (const row of chunk) {
+      const external = row.properties[ID_PROPERTY] || row.id;
+      const properties = { ...row.properties, [ID_PROPERTY]: external };
+      const existing = byExternal.get(external);
+      const record = existing
+        ? await hubspot.updateRecord(existing.ref, properties)
+        : await hubspot.createRecord(object, { properties });
+      remember(ids, object, record, row);
+      written.push(record);
+    }
+  }
+  return written;
+}
+
+async function searchByExternalIds(
+  hubspot: HubSpotPort,
+  object: ObjectType,
+  externalIds: string[],
+): Promise<CrmRecord[]> {
+  if (externalIds.length === 0) return [];
+  const results: CrmRecord[] = [];
+  const cursors = new Set<string>();
+  let after: string | undefined;
+  do {
+    const page = await hubspot.search(object, {
+      filters: [{ property: ID_PROPERTY, operator: 'IN', values: externalIds }],
+      properties: [ID_PROPERTY],
+      limit: SEARCH_LIMIT,
+      after,
+    });
+    results.push(...page.results);
+    if (!page.after || cursors.has(page.after)) break;
+    cursors.add(page.after);
+    after = page.after;
+  } while (after);
+  return results;
+}
+
+function remember(
+  ids: Map<string, string>,
+  object: ObjectType,
+  record: CrmRecord,
+  source: { id: string; properties: Record<string, string> } | undefined,
+): void {
+  const external = record.properties[ID_PROPERTY] || source?.properties[ID_PROPERTY] || source?.id;
+  if (external) {
+    ids.set(`${object}:${external}`, record.ref.id);
+    ids.set(external, record.ref.id);
+  }
+  if (source) ids.set(`${object}:${source.id}`, record.ref.id);
+  ids.set(`${object}:${record.ref.id}`, record.ref.id);
 }
 
 async function searchSeeded(hubspot: HubSpotPort, object: ObjectType): Promise<CrmRecord[]> {

@@ -216,6 +216,38 @@ describe('HubSpot client HTTP', () => {
     );
   });
 
+  it('sends hasUniqueValue on create and IN values on search', async () => {
+    const bodies: { url: string; body: Record<string, unknown> }[] = [];
+    const hubspot = client(async (url, init) => {
+      const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
+      bodies.push({ url, body });
+      if (url.includes('/search')) return json({ results: [] });
+      if (init?.method === 'GET') return json({ message: 'missing' }, 404);
+      return json({ name: 'seed_external_id' });
+    });
+
+    await hubspot.createProperty('company', {
+      name: 'seed_external_id',
+      label: 'Seed external id',
+      type: 'string',
+      fieldType: 'text',
+      groupName: 'cs_agent',
+      hasUniqueValue: true,
+    });
+    await hubspot.search('note', {
+      limit: 100,
+      filters: [{ property: 'seed_external_id', operator: 'IN', values: ['note-1', 'note-2'] }],
+    });
+
+    const created = bodies.find((call) => call.url.endsWith('/crm/v3/properties/companies'));
+    expect(created?.body.hasUniqueValue).toBe(true);
+    const search = bodies.find((call) => call.url.endsWith('/crm/v3/objects/notes/search'));
+    expect(search?.body.filterGroups).toEqual([
+      { filters: [{ propertyName: 'seed_external_id', operator: 'IN', values: ['note-1', 'note-2'] }] },
+    ]);
+    expect(search?.body.limit).toBe(100);
+  });
+
   it('treats an existing property group or property as not created', async () => {
     const hubspot = client(async (url, init) => {
       if (url.includes('/groups')) {
