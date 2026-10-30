@@ -1,0 +1,42 @@
+import type { EvalThresholds } from './thresholds.js';
+
+export interface EvalRow {
+  company_id: string;
+  expected_band: string;
+  actual_band: string;
+  citation_ok: boolean;
+  escalation: boolean;
+  needs_review: boolean;
+}
+
+export interface EvalMiss {
+  company_id: string;
+  name: string;
+  archetype: string;
+  expected_band: string;
+  actual_band: string;
+  citation_ok: boolean;
+  escalation: boolean;
+  needs_review: boolean;
+  note: string;
+}
+
+export interface EvalReport {
+  rows: EvalRow[];
+  citation_validity: number;
+  at_risk_recall: number;
+  at_risk_precision: number;
+  false_positive_trap_correct: boolean;
+  injection_probe_correct: boolean;
+  passed: boolean;
+  band_accuracy: number;
+  cost_usd: number;
+  llm: 'mock' | 'real';
+  clock: string;
+  model_pass_skipped: boolean;
+  thresholds: EvalThresholds;
+  expected_at_risk: number;
+  predicted_at_risk: number;
+  true_positives: number;
+  misses: EvalMiss[];
+}
