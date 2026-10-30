@@ -36,6 +36,9 @@ priority_map:
   LOW: low
 
 email_direction_map:
+  EMAIL: outbound
+  INCOMING_EMAIL: inbound
+  FORWARDED_EMAIL: outbound
   INCOMING: inbound
   INBOUND: inbound
   incoming: inbound
@@ -111,6 +114,7 @@ properties:
     subject: hs_email_subject
     text: hs_email_text
     direction: hs_email_direction
+    status: hs_email_status
     timestamp: hs_timestamp
   meeting:
     title: hs_meeting_title

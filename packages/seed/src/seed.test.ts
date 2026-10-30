@@ -293,7 +293,8 @@ describe('fictional Harborboard seed', () => {
     expect(meeting?.properties.hs_meeting_title).toBe('Account check-in');
     expect(meeting?.properties.hs_meeting_start_time).toBe('2026-09-20T15:00:00.000Z');
     const bounced = hero.activities.find((row) => row.object === 'email');
-    expect(bounced?.properties.hs_email_direction).toBe('BOUNCED');
+    expect(bounced?.properties.hs_email_direction).toBe('EMAIL');
+    expect(bounced?.properties.hs_email_status).toBe('BOUNCED');
     expect(bounced?.properties.hs_email_text).toBe('Delivery failed. The mailbox is unavailable.');
     expect(bounced?.properties.hs_timestamp).toBe('2026-10-20T15:00:00.000Z');
     expect(bounced?.properties.hs_email_subject).toContain('Paxton Sutter');
@@ -330,6 +331,24 @@ describe('fictional Harborboard seed', () => {
         expect(link.to.id === company.id || link.to.id.startsWith(`${company.id}-`)).toBe(true);
       }
     }
+  });
+
+  it('writes only HubSpot email direction options', () => {
+    const allowed = new Set(['EMAIL', 'INCOMING_EMAIL', 'FORWARDED_EMAIL', 'DRAFT_EMAIL']);
+    const emails = database.activities.filter((row) => row.object === 'email');
+    expect(emails.length).toBeGreaterThan(0);
+    for (const email of emails) {
+      expect(allowed.has(email.properties.hs_email_direction ?? ''), email.id).toBe(true);
+      expect(email.properties.hs_email_direction).not.toMatch(/^(SENT|INCOMING|REPLIED|BOUNCED)$/);
+    }
+    const sent = view('co-quiet-01').activities.find((row) => row.object === 'email');
+    expect(sent?.properties.hs_email_direction).toBe('EMAIL');
+    expect(sent?.properties.hs_email_status).toBe('SENT');
+    const incoming = view('co-fire-01').activities.find((row) => row.object === 'email');
+    expect(incoming?.properties.hs_email_direction).toBe('INCOMING_EMAIL');
+    expect(incoming?.properties).not.toHaveProperty('hs_email_status');
+    const reply = view('co-champion-02').activities.find((row) => row.object === 'email');
+    expect(reply?.properties.hs_email_direction).toBe('INCOMING_EMAIL');
   });
 
   it('keeps every email on example.org', () => {

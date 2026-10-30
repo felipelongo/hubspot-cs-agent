@@ -3,12 +3,14 @@ import { loadPortalConfig } from '@cs-agent/config';
 import {
   frozenClock,
   ref,
+  SIGNAL_KEYS,
   type CrmRecord,
   type HubSpotOwner,
   type HubSpotReadPort,
   type ObjectType,
   type Pipeline,
 } from '@cs-agent/core';
+import { computeSignals } from '@cs-agent/signals';
 import { buildAccountBundle } from './build.js';
 
 const portal = loadPortalConfig();
@@ -327,5 +329,100 @@ describe('buildAccountBundle', () => {
     expect(bundle.contacts.find((row) => row.ref.id === 'p-blank')).toMatchObject({ role: 'other', left_company: false });
     expect(bundle.activities.map((row) => row.ref.id)).toEqual(['note-edge', 'meet-future']);
     expect(bundle.activities.find((row) => row.ref.id === 'meet-future')?.occurred_at).toBe('2026-12-01T15:00:00.000Z');
+  });
+
+  it('treats hs_email_status BOUNCED as a champion bounce and still requests that property', async () => {
+    const company = portal.properties.company;
+    const contact = portal.properties.contact;
+    const email = portal.properties.email;
+    let requested: string[] | undefined;
+    const base = port({
+      company: crm('company', 'co-bounce', {
+        [company.name]: 'Hightide Literacy Fund',
+        [company.domain]: 'hightide.example.org',
+      }),
+      records: {
+        contact: [
+          crm('contact', 'p-paxton', {
+            [contact.first_name]: 'Paxton',
+            [contact.last_name]: 'Sutter',
+            [contact.email]: 'paxton.sutter@example.org',
+            [contact.role]: 'development_director',
+            [contact.left_company]: 'false',
+          }),
+        ],
+        email: [
+          crm('email', 'email-bounce', {
+            [email.subject]: 'Message to Paxton Sutter',
+            [email.text]: 'Delivery failed. The mailbox is unavailable.',
+            [email.direction]: 'EMAIL',
+            hs_email_status: 'BOUNCED',
+            [email.timestamp]: '2026-10-20T15:00:00.000Z',
+          }),
+        ],
+      },
+    });
+    const hubspot: HubSpotReadPort = {
+      ...base,
+      async batchRead(object, ids, properties) {
+        if (object === 'email') requested = properties;
+        return base.batchRead(object, ids, properties);
+      },
+    };
+
+    const bundle = await buildAccountBundle({ companyId: 'co-bounce', hubspot, portal, clock });
+    const bounced = bundle.activities.find((row) => row.ref.id === 'email-bounce');
+    expect(requested).toEqual(expect.arrayContaining(['hs_email_status']));
+    expect(bounced?.direction).toBe('bounced');
+
+    const left = computeSignals(bundle, clock).find((signal) => signal.key === SIGNAL_KEYS.championLeft);
+    expect(left?.value).toBe(true);
+    expect(left?.explanation).toContain('bounced message');
+    expect(left?.evidence).toEqual([ref('email', 'email-bounce')]);
+  });
+
+  it('maps FAILED email status to bounced and real HubSpot directions through the portal map', async () => {
+    const company = portal.properties.company;
+    const email = portal.properties.email;
+    const hubspot = port({
+      company: crm('company', 'co-map', { [company.name]: 'Map Co', [company.domain]: 'map.example.org' }),
+      records: {
+        email: [
+          crm('email', 'email-failed', {
+            [email.subject]: 'Undeliverable',
+            [email.text]: 'Failed',
+            [email.direction]: 'EMAIL',
+            hs_email_status: 'FAILED',
+            [email.timestamp]: '2026-10-20T15:00:00.000Z',
+          }),
+          crm('email', 'email-sent', {
+            [email.subject]: 'Checking in',
+            [email.text]: 'Hello',
+            [email.direction]: 'EMAIL',
+            hs_email_status: 'SENT',
+            [email.timestamp]: '2026-10-19T15:00:00.000Z',
+          }),
+          crm('email', 'email-in', {
+            [email.subject]: 'Reply',
+            [email.text]: 'Thanks',
+            [email.direction]: 'INCOMING_EMAIL',
+            [email.timestamp]: '2026-10-18T15:00:00.000Z',
+          }),
+          crm('email', 'email-fwd', {
+            [email.subject]: 'Forward',
+            [email.text]: 'See below',
+            [email.direction]: 'FORWARDED_EMAIL',
+            [email.timestamp]: '2026-10-17T15:00:00.000Z',
+          }),
+        ],
+      },
+    });
+
+    const bundle = await buildAccountBundle({ companyId: 'co-map', hubspot, portal, clock });
+    const direction = (id: string) => bundle.activities.find((row) => row.ref.id === id)?.direction;
+    expect(direction('email-failed')).toBe('bounced');
+    expect(direction('email-sent')).toBe('outbound');
+    expect(direction('email-in')).toBe('inbound');
+    expect(direction('email-fwd')).toBe('outbound');
   });
 });

@@ -271,7 +271,7 @@ function buildActivity(
   } else if (kind === 'email') {
     title = field(record, map, 'subject') ?? '';
     body = field(record, map, 'text') ?? '';
-    direction = directionOf(field(record, map, 'direction'), portal.email_direction_map);
+    direction = emailDirection(record, portal);
   } else {
     title = field(record, map, 'title') ?? '';
     body = field(record, map, 'body') ?? '';
@@ -303,6 +303,12 @@ function visible(
   if (!occurred) return false;
   const delta = now.getTime() - occurred.getTime();
   return delta >= 0 && delta <= windowDays * DAY_MS;
+}
+
+function emailDirection(record: CrmRecord, portal: PortalConfig): ActivitySnapshot['direction'] {
+  const status = field(record, portal.properties.email, 'status')?.toUpperCase();
+  if (status === 'BOUNCED' || status === 'FAILED') return 'bounced';
+  return directionOf(field(record, portal.properties.email, 'direction'), portal.email_direction_map);
 }
 
 function directionOf(value: string | null, map: PortalConfig['email_direction_map']): ActivitySnapshot['direction'] {

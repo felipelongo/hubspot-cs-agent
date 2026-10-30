@@ -394,6 +394,23 @@ interface PlantedEmail {
   direction: 'REPLIED' | 'INCOMING' | 'SENT' | 'BOUNCED';
 }
 
+/** Planted directions become HubSpot's hs_email_direction enum. A bounce is hs_email_status. */
+function hubspotEmailFields(direction: PlantedEmail['direction']): Record<string, string> {
+  switch (direction) {
+    case 'SENT':
+      return { hs_email_direction: 'EMAIL', hs_email_status: 'SENT' };
+    case 'BOUNCED':
+      return { hs_email_direction: 'EMAIL', hs_email_status: 'BOUNCED' };
+    case 'INCOMING':
+    case 'REPLIED':
+      return { hs_email_direction: 'INCOMING_EMAIL' };
+    default: {
+      const unknown: never = direction;
+      throw new Error(`Unknown email direction ${unknown}`);
+    }
+  }
+}
+
 interface PlantedNote {
   daysAgo: number;
   body: string;
@@ -924,7 +941,7 @@ export function buildSeed(clock: Clock): { database: SeedDatabase; expected: Exp
         properties: {
           hs_email_subject: email.subject,
           hs_email_text: email.body,
-          hs_email_direction: email.direction,
+          ...hubspotEmailFields(email.direction),
           hs_timestamp: when,
           seed_external_id: id,
           seed_origin: ORIGIN,
