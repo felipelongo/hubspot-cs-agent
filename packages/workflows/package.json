@@ -1,0 +1,16 @@
+{
+  "name": "@cs-agent/workflows",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@cs-agent/core": "workspace:*",
+    "@cs-agent/config": "workspace:*",
+    "@cs-agent/agent": "workspace:*",
+    "@cs-agent/commit": "workspace:*",
+    "@cs-agent/bundle": "workspace:*",
+    "@cs-agent/signals": "workspace:*",
+    "@cs-agent/scoring": "workspace:*"
+  }
+}

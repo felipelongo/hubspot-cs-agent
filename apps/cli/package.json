@@ -1,0 +1,14 @@
+{
+  "name": "@cs-agent/cli",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@cs-agent/core": "workspace:*",
+    "@cs-agent/workflows": "workspace:*",
+    "@cs-agent/seed": "workspace:*",
+    "@cs-agent/hubspot": "workspace:*",
+    "@cs-agent/ledger": "workspace:*",
+    "@cs-agent/setup": "workspace:*"
+  }
+}

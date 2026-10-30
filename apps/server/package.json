@@ -1,0 +1,14 @@
+{
+  "name": "@cs-agent/server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@cs-agent/core": "workspace:*",
+    "@cs-agent/config": "workspace:*",
+    "@cs-agent/ledger": "workspace:*",
+    "@cs-agent/approvals": "workspace:*",
+    "hono": "^4.7.7",
+    "@hono/node-server": "^1.14.1"
+  }
+}
