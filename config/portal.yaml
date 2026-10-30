@@ -1,0 +1,150 @@
+# Where this HubSpot portal is described.
+# Connecting a new account means editing this file. Do not hardcode these names in TypeScript.
+
+version: 1
+portal_name: Demo portal
+
+renewal_pipeline:
+  name: Renewals
+  stages:
+    - Renewal identified
+    - Outreach scheduled
+    - Negotiation
+    - Verbal commit
+    - Closed won
+    - Closed lost
+  closed_won_stage: Closed won
+  closed_lost_stage: Closed lost
+
+activity_window_days: 120
+renewal_window_days: 180
+idempotency_period: iso_week
+
+cs_lead:
+  name: Riley Okonkwo
+  email: riley.okonkwo@example.com
+
+ticket_closed_values:
+  - "4"
+  - closed
+  - CLOSED
+
+priority_map:
+  HIGH: high
+  MEDIUM: medium
+  LOW: low
+
+email_direction_map:
+  INCOMING: inbound
+  INBOUND: inbound
+  incoming: inbound
+  inbound: inbound
+  REPLIED: replied
+  REPLY: replied
+  replied: replied
+  OUTGOING: outbound
+  SENT: outbound
+  outgoing: outbound
+  outbound: outbound
+  BOUNCED: bounced
+  bounced: bounced
+
+properties:
+  company:
+    name: name
+    domain: domain
+    industry: industry
+    employees: numberofemployees
+    owner_id: hubspot_owner_id
+    health_score: cs_health_score
+    health_band: cs_health_band
+    risk_reasons: cs_risk_reasons
+    last_assessed_at: cs_last_assessed_at
+    rules_version: cs_rules_version
+    last_run_id: cs_agent_last_run_id
+    open_commitments: cs_open_commitments
+    plan: plan
+    arr: arr
+    seats_purchased: seats_purchased
+    seats_active: seats_active
+    last_login_at: last_login_at
+    seed_external_id: seed_external_id
+    seed_csm: seed_csm
+    seed_origin: seed_origin
+  contact:
+    email: email
+    first_name: firstname
+    last_name: lastname
+    role: cs_contact_role
+    left_company: cs_left_company
+    seed_external_id: seed_external_id
+    seed_origin: seed_origin
+  deal:
+    name: dealname
+    amount: amount
+    close_date: closedate
+    stage: dealstage
+    pipeline: pipeline
+    seed_external_id: seed_external_id
+    seed_origin: seed_origin
+    stage_regressed: seed_stage_regressed
+  ticket:
+    subject: subject
+    content: content
+    priority: hs_ticket_priority
+    stage: hs_pipeline_stage
+    createdate: createdate
+    seed_external_id: seed_external_id
+    seed_origin: seed_origin
+  note:
+    body: hs_note_body
+    timestamp: hs_timestamp
+  email:
+    subject: hs_email_subject
+    text: hs_email_text
+    direction: hs_email_direction
+    timestamp: hs_timestamp
+  meeting:
+    title: hs_meeting_title
+    body: hs_meeting_body
+    start: hs_meeting_start_time
+    timestamp: hs_timestamp
+  call:
+    title: hs_call_title
+    body: hs_call_body
+    timestamp: hs_timestamp
+  task:
+    subject: hs_task_subject
+    body: hs_task_body
+    status: hs_task_status
+    priority: hs_task_priority
+    due: hs_timestamp
+    type: hs_task_type
+    owner: hubspot_owner_id
+
+usage:
+  seats_active: seats_active
+  seats_purchased: seats_purchased
+  last_login_at: last_login_at
+
+rate_limits:
+  # Privately distributed apps. Free and Starter are 100 per 10 seconds.
+  # Professional and Enterprise are 190. See docs/hubspot/scopes.md for the citation.
+  general_per_10s: 100
+  # The CRM search guide allows 5 requests per second per account. Stay under that.
+  search_per_second: 4
+
+models:
+  fast_env: LLM_MODEL_FAST
+  strong_env: LLM_MODEL_STRONG
+
+# Rendered after every procedure. Per-account tone without forking the playbook.
+house_style: |
+  Write like a calm customer success manager. Be specific, short, and kind.
+  Do not hype. Do not invent facts. Sign off as "The account team".
+
+# Optional pin of procedure id → version. Empty means "use procedures.lock.json".
+procedure_pins: {}
+
+console:
+  record_url_template: "https://app.hubspot.com/contacts/{accountId}/record/{objectTypeId}/{id}"

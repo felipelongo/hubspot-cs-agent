@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@cs-agent/core": ["packages/core/src/index.ts"],
+      "@cs-agent/config": ["packages/config/src/index.ts"],
+      "@cs-agent/hubspot": ["packages/hubspot/src/index.ts"],
+      "@cs-agent/setup": ["packages/setup/src/index.ts"],
+      "@cs-agent/bundle": ["packages/bundle/src/index.ts"],
+      "@cs-agent/signals": ["packages/signals/src/index.ts"],
+      "@cs-agent/scoring": ["packages/scoring/src/index.ts"],
+      "@cs-agent/procedures": ["packages/procedures/src/index.ts"],
+      "@cs-agent/llm": ["packages/llm/src/index.ts"],
+      "@cs-agent/agent": ["packages/agent/src/index.ts"],
+      "@cs-agent/ledger": ["packages/ledger/src/index.ts"],
+      "@cs-agent/policy": ["packages/policy/src/index.ts"],
+      "@cs-agent/commit": ["packages/commit/src/index.ts"],
+      "@cs-agent/approvals": ["packages/approvals/src/index.ts"],
+      "@cs-agent/workflows": ["packages/workflows/src/index.ts"],
+      "@cs-agent/seed": ["packages/seed/src/index.ts"],
+      "@cs-agent/evals": ["packages/evals/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "vitest.config.ts"]
+}

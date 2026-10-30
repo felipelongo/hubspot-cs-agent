@@ -1,0 +1,38 @@
+# What can happen on its own, what needs a human, and what goes to the CS lead.
+# First matching rule wins. needs_review is first so a bad citation is never auto-written.
+# A critical account (or a large at-risk account) is escalated before the "safe write" rules.
+version: 1.0.0
+rules:
+  - id: needs_review_needs_a_human
+    comment: A citation failure or missing data is never auto-committed.
+    when: { needs_review: true }
+    then: approval
+
+  - id: critical_or_large_at_risk
+    comment: The CS lead sees critical accounts, and at-risk accounts at or above this ARR.
+    when: { band: critical }
+    or_when: { band: at_risk, arr_gte: 50000 }
+    then: escalate
+
+  - id: health_properties_are_safe_to_write
+    when: { kind: set_properties, target: company }
+    then: auto
+
+  - id: tasks_for_the_owner_are_safe
+    when: { kind: create_task, assignee: owner }
+    then: auto
+
+  - id: timeline_notes_are_safe
+    when: { kind: log_note }
+    then: auto
+
+  - id: drafted_email_needs_the_owner
+    comment: The draft becomes a HubSpot task. A human sends the email.
+    when: { kind: draft_outreach }
+    then: approval
+
+  - id: stage_changes_need_a_human
+    when: { kind: update_deal_stage }
+    then: approval
+
+default: approval

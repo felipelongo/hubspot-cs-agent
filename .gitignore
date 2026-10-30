@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+*.tsbuildinfo
+coverage/
+playwright-report/
+test-results/
+.pglite/
+data/pglite/
+reports/*.md
+!reports/.gitkeep
+.DS_Store

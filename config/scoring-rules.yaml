@@ -1,0 +1,112 @@
+# Health score. Start at 100 and subtract. The model does not pick the number.
+rules_version: 1.0.0
+start: 100
+bands:
+  healthy: 80
+  watch: 60
+  at_risk: 40
+  critical: 0
+rules:
+  - id: missing_usage_data
+    label: Usage data is missing, so this account is not treated as healthy
+    points: -30
+    needs_review: true
+    when: { signal: missing_usage_data, eq: true }
+
+  - id: champion_left
+    label: The champion has left and nobody has replaced them
+    points: -42
+    when: { signal: champion_left, eq: true }
+
+  - id: usage_drop
+    label: Active seats are well below the seats the customer pays for
+    points: -20
+    when:
+      all:
+        - { signal: missing_usage_data, eq: false }
+        - { signal: usage_ratio, lt: 0.6 }
+
+  - id: quiet_account
+    label: No meaningful touch in 60 days, and usage is not strong enough to explain the silence
+    points: -25
+    when:
+      all:
+        - { signal: days_since_last_touch, gte: 60 }
+        - { not: { signal: high_usage_quiet_ok, eq: true } }
+
+  - id: quiet_but_active
+    label: The CSM has been quiet, but product usage is high and there are no severe tickets
+    points: -5
+    when:
+      all:
+        - { signal: days_since_last_touch, gte: 60 }
+        - { signal: high_usage_quiet_ok, eq: true }
+
+  - id: stale_touch
+    label: No meaningful touch in 30 days
+    points: -10
+    when:
+      all:
+        - { signal: days_since_last_touch, gte: 30 }
+        - { signal: days_since_last_touch, lt: 60 }
+
+  - id: open_high_ticket
+    label: An open high-priority ticket
+    points: -20
+    cap: 3
+    when: { signal: open_high_tickets, each: true }
+
+  - id: open_medium_ticket
+    label: An open medium-priority ticket
+    points: -6
+    cap: 3
+    when: { signal: open_medium_tickets, each: true }
+
+  - id: ticket_spike
+    label: Ticket volume in the last 30 days is much higher than the prior quarter
+    points: -12
+    when: { signal: ticket_trend_ratio, gte: 2 }
+
+  - id: renewal_within_14
+    label: The renewal closes within 14 days
+    points: -18
+    when: { signal: days_to_renewal, lte: 14 }
+
+  - id: renewal_within_30
+    label: The renewal closes within 30 days
+    points: -12
+    when:
+      all:
+        - { signal: days_to_renewal, gt: 14 }
+        - { signal: days_to_renewal, lte: 30 }
+
+  - id: renewal_within_45
+    label: The renewal closes within 45 days
+    points: -8
+    when:
+      all:
+        - { signal: days_to_renewal, gt: 30 }
+        - { signal: days_to_renewal, lte: 45 }
+
+  - id: no_meeting_booked
+    label: The renewal is within 21 days and no meeting is on the calendar
+    points: -10
+    when:
+      all:
+        - { signal: days_to_renewal, lte: 21 }
+        - { signal: meeting_booked, eq: false }
+
+  - id: budget_language
+    label: A recent note mentions a procurement review or budget cuts
+    points: -25
+    when: { signal: budget_risk_language, eq: true }
+
+  - id: negative_sentiment
+    label: A recent customer message reads as angry or disappointed
+    points: -15
+    when: { signal: negative_sentiment, eq: true }
+
+  - id: deal_stage_regression
+    label: The renewal deal moved backward a stage
+    points: -15
+    when: { signal: deal_stage_regression, eq: true }
