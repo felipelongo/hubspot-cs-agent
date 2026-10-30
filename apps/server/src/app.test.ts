@@ -315,7 +315,7 @@ describe('console', () => {
     expect(await empty.text()).toContain('No audit rows match.');
     const metrics = await consoleApp.request('/metrics', { headers: { cookie } });
     const html = await metrics.text();
-    expect(html).toContain('Assumes 25 minutes of CSM time saved for each at-risk or critical account assessed (health review and a note).');
+    expect(html).toContain('Assumes 25 minutes of CSM time saved for each at-risk or critical client assessed (health review and a note).');
     expect(html).toContain('25 minutes');
   });
 

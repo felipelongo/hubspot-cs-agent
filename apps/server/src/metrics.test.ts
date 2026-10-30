@@ -28,7 +28,7 @@ function proposal(partial: Partial<ProposedAction> & Pick<ProposedAction, 'id' |
 }
 
 describe('metrics', () => {
-  it('counts distinct at-risk accounts and states the 25 minute assumption', () => {
+  it('counts distinct at-risk clients and states the 25 minute assumption', () => {
     const proposals = [
       proposal({
         id: 'score-1',

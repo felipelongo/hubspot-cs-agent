@@ -37,7 +37,7 @@ export function loginDocument(password: string, error?: string): string {
 
 export function queueDocument(groups: QueueGroup[], now: Date, error?: string): string {
   const body = `${flash(error)}
-    <p class="lead">Proposals waiting for a person. Grouped by account.</p>
+    <p class="lead">Proposals waiting for a person. Grouped by client.</p>
     ${groups.length === 0 ? '<div class="card"><p>No proposals are waiting.</p></div>' : groups.map((group) => renderGroup(group, now)).join('')}`;
   return page('Queue', body, true);
 }
@@ -48,6 +48,7 @@ export function proposalDocument(input: {
   accountName: string;
   approval: ApprovalRecord | null;
   hubspotAccountId: string | undefined;
+  platformLines?: string[];
   error?: string;
   notice?: string;
 }): string {
@@ -65,6 +66,8 @@ export function proposalDocument(input: {
       <p><strong>Idempotency key</strong><br /><code>${escapeHtml(proposal.idempotency_key)}</code></p>
       ${proposal.supersedes_id ? `<p><strong>Supersedes</strong> <a href="/proposals/${escapeHtml(proposal.supersedes_id)}">${escapeHtml(proposal.supersedes_id)}</a></p>` : ''}
     </div>
+    <h2>Platform</h2>
+    ${(input.platformLines ?? []).map((line) => `<p>${escapeHtml(line)}</p>`).join('') || '<p class="muted">Platform signals are not on this proposal.</p>'}
     <h2>Reasons</h2>
     ${proposal.reasons.map((reason) => `<div class="card"><p>${escapeHtml(reason.text)}</p><p>${renderCitations(reason.citations, input.portal, input.hubspotAccountId)}</p></div>`).join('') || '<p class="muted">No reasons.</p>'}
     ${hashMismatch}
@@ -81,7 +84,7 @@ export function runsDocument(runs: RunRecord[]): string {
     rows.length === 0
       ? '<p>No runs yet.</p>'
       : `<div class="scroll"><table>
-          <thead><tr><th>Workflow</th><th>Mode</th><th>Status</th><th>Started</th><th>Accounts</th><th>Proposals</th><th>Commits</th><th>Cost</th></tr></thead>
+          <thead><tr><th>Workflow</th><th>Mode</th><th>Status</th><th>Started</th><th>Clients</th><th>Proposals</th><th>Commits</th><th>Cost</th></tr></thead>
           <tbody>${rows
             .map(
               (run) => `<tr>
@@ -105,7 +108,7 @@ export function runDocument(run: RunRecord, proposals: ProposedAction[], commits
       <p><strong>Status</strong> ${escapeHtml(run.status)} · ${escapeHtml(run.mode)}</p>
       <p><strong>Started</strong> ${escapeHtml(run.started_at)}</p>
       <p><strong>Finished</strong> ${escapeHtml(run.finished_at ?? 'still running')}</p>
-      <p><strong>Accounts</strong> ${run.accounts_considered} · <strong>Proposals</strong> ${run.proposals_created} · <strong>Commits</strong> ${run.commits}</p>
+      <p><strong>Clients</strong> ${run.accounts_considered} · <strong>Proposals</strong> ${run.proposals_created} · <strong>Commits</strong> ${run.commits}</p>
       <p><strong>Cost</strong> ${formatRunCost(run.cost_usd, true)}</p>
       ${run.error ? `<p class="error">${escapeHtml(run.error)}</p>` : ''}
     </div>
@@ -155,8 +158,8 @@ export function metricsDocument(summary: MetricsSummary): string {
     .join('');
   const hours = (summary.minutesSaved / 60).toFixed(2);
   const body = `<div class="card">
-      <p><strong>Accounts assessed</strong> ${summary.accountsAssessed}</p>
-      <p><strong>At-risk found</strong> ${summary.atRiskProposals} proposals across ${summary.atRiskAccounts} accounts</p>
+      <p><strong>Clients assessed</strong> ${summary.accountsAssessed}</p>
+      <p><strong>At-risk found</strong> ${summary.atRiskProposals} proposals across ${summary.atRiskAccounts} clients</p>
       <p><strong>Auto-commit rate</strong> ${percent(summary.autoCommitRate)}</p>
       <p><strong>Approval rate</strong> ${percent(summary.approvalRate)}</p>
       <p><strong>Median time to approval</strong> ${summary.medianApprovalMs == null ? 'n/a' : formatDuration(summary.medianApprovalMs)}</p>
@@ -191,7 +194,7 @@ function renderGroup(group: QueueGroup, now: Date): string {
 
 function proposalTable(proposals: ProposedAction[]): string {
   if (proposals.length === 0) return '<p class="muted">No proposals.</p>';
-  return `<div class="scroll"><table><thead><tr><th>Kind</th><th>State</th><th>Account</th></tr></thead><tbody>${proposals
+  return `<div class="scroll"><table><thead><tr><th>Kind</th><th>State</th><th>Client</th></tr></thead><tbody>${proposals
     .map(
       (proposal) => `<tr><td><a href="/proposals/${escapeHtml(proposal.id)}">${escapeHtml(proposal.kind)}</a></td><td>${escapeHtml(proposal.state)}</td><td>${escapeHtml(proposal.account_ref.id)}</td></tr>`,
     )
