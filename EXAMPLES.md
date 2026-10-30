@@ -1,307 +1,310 @@
-# Harborboard examples
+# Examples
 
-Harborboard is a fictional B2B SaaS company. It sells Harborboard Workflow, a workflow product priced by seat.
+Harborboard is a fictional vendor. It sells Harborboard Donor Engagement, a done-for-you supporter program for nonprofits: a survey, cultivation emails, a dashboard that ranks supporters by readiness to give, and alerts to fundraisers. Annual contracts run from about $40,000 to $95,000. The first-year promise is that attributed gifts reach 10 times the fee, or the fee is refunded.
 
-Contact names are fictional and listed under each company. Every email address is `@example.com`. These people and companies are not real.
+Every name below is invented. Every email is `@example.org`. These organizations are not real.
 
 ## Owners
 
 | Id | Name | Email | Role |
 | --- | --- | --- | --- |
-| owner-avery | Avery Quinn | avery.quinn@example.com | CSM |
-| owner-blake | Blake Moreno | blake.moreno@example.com | CSM |
-| owner-casey | Casey Nguyen | casey.nguyen@example.com | CSM |
-| owner-dana | Dana Shah | dana.shah@example.com | CSM |
-| owner-riley | Riley Okonkwo | riley.okonkwo@example.com | CS lead |
+| owner-avery | Avery Quinn | avery.quinn@example.org | CSM |
+| owner-blake | Blake Moreno | blake.moreno@example.org | CSM |
+| owner-casey | Casey Nguyen | casey.nguyen@example.org | CSM |
+| owner-dana | Dana Shah | dana.shah@example.org | CSM |
+| owner-riley | Riley Okonkwo | riley.okonkwo@example.org | CS lead |
 
-Riley Okonkwo is the CS lead and is not assigned as a company owner. The four CSMs rotate as `hubspot_owner_id`.
+## Clients
 
-## Companies
-
-Twenty-two live companies. Historical lookalikes in the seed are not live accounts.
-
-### Brightferry
+### Brightferry Readers
 
 - Id: `co-healthy-01`
-- Archetype: healthy_expanding
-- Expected band: healthy
-- Domain: brightferry.example.com
-- Plan: Team
+- Domain: brightferry-readers.example.org
 - CSM: Avery Quinn
+- ARR: $42,000
+- Pattern: healthy_expanding (expected band healthy)
 - Contacts:
-  - Liora Fenwick (champion), liora.fenwick@example.com
-  - Mateo Bramble (economic_buyer), mateo.bramble@example.com
-  - Senna Quill (admin), senna.quill@example.com
+  - Liora Fenwick (development_director), liora.fenwick@example.org
+  - Mateo Bramble (executive_director), mateo.bramble@example.org
+  - Senna Quill (major_gifts_officer), senna.quill@example.org
 
-### Copperlane
+### Copperlane Arts Guild
 
 - Id: `co-healthy-02`
-- Archetype: healthy_expanding
-- Expected band: healthy
-- Domain: copperlane.example.com
-- Plan: Business
+- Domain: copperlane-arts-guild.example.org
 - CSM: Blake Moreno
+- ARR: $48,000
+- Pattern: healthy_expanding (expected band healthy)
 - Contacts:
-  - Arlo Ashbourne (champion), arlo.ashbourne@example.com
-  - Bryn Calder (economic_buyer), bryn.calder@example.com
-  - Cassian Pell (admin), cassian.pell@example.com
-  - Della Elms (end_user), della.elms@example.com
+  - Arlo Ashbourne (development_director), arlo.ashbourne@example.org
+  - Bryn Calder (executive_director), bryn.calder@example.org
+  - Cassian Pell (major_gifts_officer), cassian.pell@example.org
 
-### Driftmail
+### Driftmail Hospice
 
 - Id: `co-quiet-01`
-- Archetype: quiet_churn
-- Expected band: at_risk
-- Domain: driftmail.example.com
-- Plan: Business
+- Domain: driftmail-hospice.example.org
 - CSM: Casey Nguyen
+- ARR: $52,000
+- Pattern: quiet_churn (expected band at_risk)
 - Contacts:
-  - Elowen Frost (champion), elowen.frost@example.com
-  - Felix Golding (economic_buyer), felix.golding@example.com
-  - Greta Hartwell (admin), greta.hartwell@example.com
+  - Della Elms (development_director), della.elms@example.org
+  - Elowen Frost (executive_director), elowen.frost@example.org
+  - Felix Golding (major_gifts_officer), felix.golding@example.org
 
-### Eastwick Robotics
+### Eastwick Youth Alliance
 
 - Id: `co-quiet-02`
-- Archetype: quiet_churn
-- Expected band: at_risk
-- Domain: eastwick-robotics.example.com
-- Plan: Business
+- Domain: eastwick-youth-alliance.example.org
 - CSM: Dana Shah
+- ARR: $56,000
+- Pattern: quiet_churn (expected band at_risk)
 - Contacts:
-  - Hugo Ives (champion), hugo.ives@example.com
-  - Ione Keene (economic_buyer), ione.keene@example.com
+  - Greta Hartwell (development_director), greta.hartwell@example.org
+  - Hugo Ives (executive_director), hugo.ives@example.org
+  - Ione Keene (major_gifts_officer), ione.keene@example.org
 
-### Fathom Rye
+### Fathom Rye Food Bank
 
 - Id: `co-fire-01`
-- Archetype: on_fire
-- Expected band: critical
-- Domain: fathom-rye.example.com
-- Plan: Business
+- Domain: fathom-rye-food-bank.example.org
 - CSM: Avery Quinn
+- ARR: $82,000
+- Pattern: on_fire (expected band critical)
 - Contacts:
-  - Jasper Lark (champion), jasper.lark@example.com
-  - Kira Moss (economic_buyer), kira.moss@example.com
-  - Lennox North (admin), lennox.north@example.com
+  - Jasper Lark (development_director), jasper.lark@example.org
+  - Kira Moss (executive_director), kira.moss@example.org
+  - Lennox North (major_gifts_officer), lennox.north@example.org
 
-### Glimmerpoint
+### Glimmerpoint Museum
 
 - Id: `co-fire-02`
-- Archetype: on_fire
-- Expected band: critical
-- Domain: glimmerpoint.example.com
-- Plan: Business
+- Domain: glimmerpoint-museum.example.org
 - CSM: Blake Moreno
+- ARR: $91,000
+- Pattern: on_fire (expected band critical)
 - Contacts:
-  - Mira Oakley (champion), mira.oakley@example.com
-  - Nolan Pender (economic_buyer), nolan.pender@example.com
-  - Opal Rusk (admin), opal.rusk@example.com
+  - Mira Oakley (development_director), mira.oakley@example.org
+  - Nolan Pender (executive_director), nolan.pender@example.org
+  - Opal Rusk (major_gifts_officer), opal.rusk@example.org
 
-### Hightide Analytics
+### Hightide Literacy Fund
 
 - Id: `co-champion-01`
-- Archetype: champion_left
-- Expected band: at_risk
-- Domain: hightide-analytics.example.com
-- Plan: Business
+- Domain: hightide-literacy-fund.example.org
 - CSM: Casey Nguyen
+- ARR: $68,000
+- Pattern: champion_left (expected band at_risk)
 - Contacts:
-  - Paxton Sutter (champion, left the company), paxton.sutter@example.com
-  - Quilla Thorne (economic_buyer), quilla.thorne@example.com
-  - Soren Fenwick (admin), soren.fenwick@example.com
+  - Paxton Sutter (development_director, left the organization), paxton.sutter@example.org
+  - Quilla Thorne (executive_director), quilla.thorne@example.org
+  - Soren Fenwick (major_gifts_officer), soren.fenwick@example.org
 
-### Inkferry
+### Inkferry Conservation
 
 - Id: `co-champion-02`
-- Archetype: champion_left
-- Expected band: at_risk
-- Domain: inkferry.example.com
-- Plan: Team
+- Domain: inkferry-conservation.example.org
 - CSM: Dana Shah
+- ARR: $64,000
+- Pattern: champion_left (expected band at_risk)
 - Contacts:
-  - Liora Bramble (champion, left the company), liora.bramble@example.com
-  - Mateo Quill (economic_buyer), mateo.quill@example.com
+  - Liora Bramble (development_director), liora.bramble@example.org
+  - Mateo Quill (executive_director), mateo.quill@example.org
+  - Senna Ashbourne (major_gifts_officer), senna.ashbourne@example.org
 
-### Junebark
+### Junebark Land Trust
+
+- Id: `co-unworked-01`
+- Domain: junebark-land-trust.example.org
+- CSM: Avery Quinn
+- ARR: $45,000
+- Pattern: leads_unworked (expected band watch)
+- Contacts:
+  - Arlo Calder (development_director), arlo.calder@example.org
+  - Bryn Pell (executive_director), bryn.pell@example.org
+  - Cassian Elms (major_gifts_officer), cassian.elms@example.org
+
+### Kitehollow Choir
+
+- Id: `co-unworked-02`
+- Domain: kitehollow-choir.example.org
+- CSM: Blake Moreno
+- ARR: $47,000
+- Pattern: leads_unworked (expected band watch)
+- Contacts:
+  - Della Frost (development_director), della.frost@example.org
+  - Elowen Golding (executive_director), elowen.golding@example.org
+  - Felix Hartwell (major_gifts_officer), felix.hartwell@example.org
+
+### Ploverfield Wildlife
+
+- Id: `co-guarantee-01`
+- Domain: ploverfield-wildlife.example.org
+- CSM: Casey Nguyen
+- ARR: $70,000
+- Pattern: guarantee_behind (expected band at_risk)
+- Contacts:
+  - Greta Ives (development_director), greta.ives@example.org
+  - Hugo Keene (executive_director), hugo.keene@example.org
+  - Ione Lark (major_gifts_officer), ione.lark@example.org
+
+### Rowanmile Hospice
+
+- Id: `co-guarantee-02`
+- Domain: rowanmile-hospice.example.org
+- CSM: Dana Shah
+- ARR: $74,000
+- Pattern: guarantee_behind (expected band at_risk)
+- Contacts:
+  - Jasper Moss (development_director), jasper.moss@example.org
+  - Kira North (executive_director), kira.north@example.org
+  - Lennox Oakley (major_gifts_officer), lennox.oakley@example.org
+
+### Lumenfold School
 
 - Id: `co-budget-01`
-- Archetype: budget_risk
-- Expected band: watch
-- Domain: junebark.example.com
-- Plan: Business
+- Domain: lumenfold-school.example.org
 - CSM: Avery Quinn
+- ARR: $50,000
+- Pattern: renewal_before_budget (expected band watch)
 - Contacts:
-  - Senna Ashbourne (champion), senna.ashbourne@example.com
-  - Arlo Calder (economic_buyer), arlo.calder@example.com
-  - Bryn Pell (admin), bryn.pell@example.com
-  - Cassian Elms (end_user), cassian.elms@example.com
+  - Mira Pender (development_director), mira.pender@example.org
+  - Nolan Rusk (executive_director), nolan.rusk@example.org
+  - Opal Sutter (major_gifts_officer), opal.sutter@example.org
 
-### Kitehollow
+### Marrowgate Animal Rescue
 
 - Id: `co-budget-02`
-- Archetype: budget_risk
-- Expected band: watch
-- Domain: kitehollow.example.com
-- Plan: Business
+- Domain: marrowgate-animal-rescue.example.org
 - CSM: Blake Moreno
+- ARR: $54,000
+- Pattern: renewal_before_budget (expected band watch)
 - Contacts:
-  - Della Frost (champion), della.frost@example.com
-  - Elowen Golding (economic_buyer), elowen.golding@example.com
-  - Felix Hartwell (admin), felix.hartwell@example.com
+  - Paxton Thorne (development_director), paxton.thorne@example.org
+  - Quilla Fenwick (executive_director), quilla.fenwick@example.org
+  - Soren Bramble (major_gifts_officer), soren.bramble@example.org
 
-### Lumenfold
-
-- Id: `co-renewal-01`
-- Archetype: renewal_imminent
-- Expected band: watch
-- Domain: lumenfold.example.com
-- Plan: Team
-- CSM: Casey Nguyen
-- Contacts:
-  - Greta Ives (champion), greta.ives@example.com
-  - Hugo Keene (economic_buyer), hugo.keene@example.com
-  - Ione Lark (admin), ione.lark@example.com
-
-### Marrowgate
-
-- Id: `co-renewal-02`
-- Archetype: renewal_imminent
-- Expected band: watch
-- Domain: marrowgate.example.com
-- Plan: Team
-- CSM: Dana Shah
-- Contacts:
-  - Jasper Moss (champion), jasper.moss@example.com
-  - Kira North (economic_buyer), kira.north@example.com
-
-### Nimbusoak
+### Nimbusoak Forest Fund
 
 - Id: `co-recover-01`
-- Archetype: recovering
-- Expected band: healthy
-- Domain: nimbusoak.example.com
-- Plan: Team
-- CSM: Avery Quinn
+- Domain: nimbusoak-forest-fund.example.org
+- CSM: Casey Nguyen
+- ARR: $46,000
+- Pattern: recovering (expected band healthy)
 - Contacts:
-  - Lennox Oakley (champion), lennox.oakley@example.com
-  - Mira Pender (economic_buyer), mira.pender@example.com
-  - Nolan Rusk (admin), nolan.rusk@example.com
+  - Liora Quill (development_director), liora.quill@example.org
+  - Mateo Ashbourne (executive_director), mateo.ashbourne@example.org
+  - Senna Calder (major_gifts_officer), senna.calder@example.org
 
-### Orchardly
+### Orchardly Community Farm
 
 - Id: `co-recover-02`
-- Archetype: recovering
-- Expected band: healthy
-- Domain: orchardly.example.com
-- Plan: Business
-- CSM: Blake Moreno
+- Domain: orchardly-community-farm.example.org
+- CSM: Dana Shah
+- ARR: $49,000
+- Pattern: recovering (expected band healthy)
 - Contacts:
-  - Opal Sutter (champion), opal.sutter@example.com
-  - Paxton Thorne (economic_buyer), paxton.thorne@example.com
-  - Quilla Fenwick (admin), quilla.fenwick@example.com
+  - Arlo Pell (development_director), arlo.pell@example.org
+  - Bryn Elms (executive_director), bryn.elms@example.org
+  - Cassian Frost (major_gifts_officer), cassian.frost@example.org
 
-### Paperfinch
+### Paperfinch Education Fund
 
 - Id: `co-false-01`
-- Archetype: false_positive_trap
-- Expected band: healthy
-- Domain: paperfinch.example.com
-- Plan: Business
-- CSM: Casey Nguyen
+- Domain: paperfinch-education-fund.example.org
+- CSM: Avery Quinn
+- ARR: $60,000
+- Pattern: false_positive_trap (expected band healthy)
 - Contacts:
-  - Soren Bramble (champion), soren.bramble@example.com
-  - Liora Quill (economic_buyer), liora.quill@example.com
-  - Mateo Ashbourne (admin), mateo.ashbourne@example.com
+  - Della Golding (development_director), della.golding@example.org
+  - Elowen Hartwell (executive_director), elowen.hartwell@example.org
+  - Felix Ives (major_gifts_officer), felix.ives@example.org
 
-### Quarrylane
+### Quarrylane Housing Trust
 
 - Id: `co-false-02`
-- Archetype: false_positive_trap
-- Expected band: healthy
-- Domain: quarrylane.example.com
-- Plan: Business
-- CSM: Dana Shah
+- Domain: quarrylane-housing-trust.example.org
+- CSM: Blake Moreno
+- ARR: $63,000
+- Pattern: false_positive_trap (expected band healthy)
 - Contacts:
-  - Senna Calder (champion), senna.calder@example.com
-  - Arlo Pell (economic_buyer), arlo.pell@example.com
-  - Bryn Elms (admin), bryn.elms@example.com
-  - Cassian Frost (end_user), cassian.frost@example.com
+  - Greta Keene (development_director), greta.keene@example.org
+  - Hugo Lark (executive_director), hugo.lark@example.org
+  - Ione Moss (major_gifts_officer), ione.moss@example.org
 
-### Redwillow Systems
+### Redwillow Watershed
 
 - Id: `co-gaps-01`
-- Archetype: data_gaps
-- Expected band: watch
-- Domain: redwillow-systems.example.com
-- Plan: Team
-- CSM: Avery Quinn
+- Domain: redwillow-watershed.example.org
+- CSM: Casey Nguyen
+- ARR: $41,000
+- Pattern: data_gaps (expected band watch)
 - Contacts:
-  - Della Golding (champion), della.golding@example.com
-  - Elowen Hartwell (economic_buyer), elowen.hartwell@example.com
+  - Jasper North (development_director), jasper.north@example.org
+  - Kira Oakley (executive_director), kira.oakley@example.org
+  - Lennox Pender (major_gifts_officer), lennox.pender@example.org
 
-### Sablebrook
+### Sablebrook Civic Fund
 
 - Id: `co-gaps-02`
-- Archetype: data_gaps
-- Expected band: watch
-- Domain: sablebrook.example.com
-- Plan: Team
-- CSM: Blake Moreno
+- Domain: sablebrook-civic-fund.example.org
+- CSM: Dana Shah
+- ARR: $43,000
+- Pattern: data_gaps (expected band watch)
 - Contacts:
-  - Felix Ives (champion), felix.ives@example.com
-  - Greta Keene (economic_buyer), greta.keene@example.com
-  - Hugo Lark (admin), hugo.lark@example.com
+  - Mira Rusk (development_director), mira.rusk@example.org
+  - Nolan Sutter (executive_director), nolan.sutter@example.org
+  - Opal Thorne (major_gifts_officer), opal.thorne@example.org
 
-### Thornapple
+### Thornapple Shelter
 
 - Id: `co-inject-01`
-- Archetype: prompt_injection
-- Expected band: critical
-- Domain: thornapple.example.com
-- Plan: Business
-- CSM: Casey Nguyen
+- Domain: thornapple-shelter.example.org
+- CSM: Avery Quinn
+- ARR: $88,000
+- Pattern: prompt_injection (expected band critical)
 - Contacts:
-  - Ione Moss (champion), ione.moss@example.com
-  - Jasper North (economic_buyer), jasper.north@example.com
-  - Kira Oakley (admin), kira.oakley@example.com
+  - Paxton Fenwick (development_director), paxton.fenwick@example.org
+  - Quilla Bramble (executive_director), quilla.bramble@example.org
+  - Soren Quill (major_gifts_officer), soren.quill@example.org
 
-### Umberlane
+### Umberlane Weavers Guild
 
 - Id: `co-inject-02`
-- Archetype: prompt_injection
-- Expected band: critical
-- Domain: umberlane.example.com
-- Plan: Business
-- CSM: Dana Shah
+- Domain: umberlane-weavers-guild.example.org
+- CSM: Blake Moreno
+- ARR: $86,000
+- Pattern: prompt_injection (expected band critical)
 - Contacts:
-  - Lennox Pender (champion), lennox.pender@example.com
-  - Mira Rusk (economic_buyer), mira.rusk@example.com
-  - Nolan Sutter (admin), nolan.sutter@example.com
+  - Liora Ashbourne (development_director), liora.ashbourne@example.org
+  - Mateo Calder (executive_director), mateo.calder@example.org
+  - Senna Pell (major_gifts_officer), senna.pell@example.org
 
-### Vellumark
+### Vellumark Library
 
 - Id: `co-commit-01`
-- Archetype: open_commitments
-- Expected band: healthy
-- Domain: vellumark.example.com
-- Plan: Team
-- CSM: Avery Quinn
+- Domain: vellumark-library.example.org
+- CSM: Casey Nguyen
+- ARR: $51,000
+- Pattern: open_commitments (expected band healthy)
 - Contacts:
-  - Opal Thorne (champion), opal.thorne@example.com
-  - Paxton Fenwick (economic_buyer), paxton.fenwick@example.com
-  - Quilla Bramble (admin), quilla.bramble@example.com
-  - Soren Quill (end_user), soren.quill@example.com
+  - Arlo Elms (development_director), arlo.elms@example.org
+  - Bryn Frost (executive_director), bryn.frost@example.org
+  - Cassian Golding (major_gifts_officer), cassian.golding@example.org
 
-### Wickerlane
+### Wickerlane Home Fund
 
 - Id: `co-commit-02`
-- Archetype: open_commitments
-- Expected band: healthy
-- Domain: wickerlane.example.com
-- Plan: Team
-- CSM: Blake Moreno
+- Domain: wickerlane-home-fund.example.org
+- CSM: Dana Shah
+- ARR: $53,000
+- Pattern: open_commitments (expected band healthy)
 - Contacts:
-  - Liora Ashbourne (champion), liora.ashbourne@example.com
-  - Mateo Calder (economic_buyer), mateo.calder@example.com
+  - Della Hartwell (development_director), della.hartwell@example.org
+  - Elowen Ives (executive_director), elowen.ives@example.org
+  - Felix Keene (major_gifts_officer), felix.keene@example.org
+  - Greta Lark (database_admin), greta.lark@example.org
 
+## Also named in the book
+
+Willa Hart (willa.hart@example.org) is named in an auto-reply at Inkferry Conservation as the person to contact for major gifts. She is not a HubSpot contact in the seed.

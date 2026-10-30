@@ -14,8 +14,10 @@ export interface CrmRecord {
 
 export interface SearchFilter {
   property: string;
-  operator: 'EQ' | 'NEQ' | 'LT' | 'LTE' | 'GT' | 'GTE' | 'CONTAINS_TOKEN' | 'HAS_PROPERTY' | 'NOT_HAS_PROPERTY';
+  operator: 'EQ' | 'NEQ' | 'LT' | 'LTE' | 'GT' | 'GTE' | 'CONTAINS_TOKEN' | 'HAS_PROPERTY' | 'NOT_HAS_PROPERTY' | 'IN';
   value?: string;
+  /** HubSpot IN accepts at most 100 values. */
+  values?: string[];
 }
 
 export interface SearchRequest {
@@ -40,6 +42,12 @@ export interface PropertyDefinition {
   groupName: string;
   description?: string;
   options?: { label: string; value: string }[];
+  /** Required for batch upsert id properties. Engagements often reject this. */
+  hasUniqueValue?: boolean;
+  /** HubSpot-defined properties are not archived by setup. */
+  hubspotDefined?: boolean;
+  /** Read-only or calculated properties are not archived by setup. */
+  readOnly?: boolean;
 }
 
 export interface HubSpotOwner {
@@ -93,6 +101,7 @@ export interface HubSpotWritePort {
   archive(record: RecordRef): Promise<void>;
   createPropertyGroup(object: ObjectType, group: { name: string; label: string }): Promise<{ created: boolean }>;
   createProperty(object: ObjectType, property: PropertyDefinition): Promise<{ created: boolean }>;
+  archiveProperty(object: ObjectType, name: string): Promise<void>;
   ensurePipeline(
     object: 'deal' | 'ticket',
     spec: { label: string; stages: { label: string }[] },
@@ -122,12 +131,20 @@ export interface LlmGenerateInput {
 export interface LlmUsage {
   input_tokens: number;
   output_tokens: number;
+  /** Present when the provider reported prompt-cache reads. Not included in input_tokens. */
+  cache_read_input_tokens?: number;
+  /** Present when the provider reported prompt-cache writes. Not included in input_tokens. */
+  cache_creation_input_tokens?: number;
 }
 
 export interface LlmGenerateResult {
   output: unknown;
   usage: LlmUsage;
-  cost_usd: number;
+  /**
+   * Estimated USD from config/model-prices.yaml.
+   * Null when that file has no row for `model`. A mock run is 0, not null.
+   */
+  cost_usd: number | null;
   model: string;
   latency_ms: number;
   tool_calls: LlmToolCall[];
@@ -157,7 +174,8 @@ export interface RunRecord {
   accounts_considered: number;
   proposals_created: number;
   commits: number;
-  cost_usd: number;
+  /** Null when any logged call had no configured price. */
+  cost_usd: number | null;
   error: string | null;
 }
 
@@ -188,7 +206,8 @@ export interface LlmCallRecord {
   tier: 'fast' | 'strong';
   input_tokens: number;
   output_tokens: number;
-  cost_usd: number;
+  /** Null when the model id had no configured price. */
+  cost_usd: number | null;
   latency_ms: number;
   at: string;
 }
@@ -204,7 +223,7 @@ export interface LedgerPort {
       accounts_considered: number;
       proposals_created: number;
       commits: number;
-      cost_usd: number;
+      cost_usd: number | null;
       error?: string;
     },
   ): Promise<void>;
@@ -223,8 +242,25 @@ export interface LedgerPort {
   logLlmCall(call: LlmCallRecord): Promise<void>;
   listRuns(): Promise<RunRecord[]>;
   getRun(id: string): Promise<RunRecord | null>;
-  /** Sum of llm cost for a run. */
-  runCost(runId: string): Promise<number>;
+  /**
+   * Sum of llm cost for a run.
+   * 0 when the run logged no calls. Null when any call has no configured price.
+   */
+  runCost(runId: string): Promise<number | null>;
+  /**
+   * Record a webhook dedupe key. Returns true when this caller owns it.
+   * A null window never replaces an existing key. A window replaces it once the row is at least that old.
+   */
+  claimWebhookDedupe(input: WebhookDedupeClaim): Promise<boolean>;
+}
+
+export interface WebhookDedupeClaim {
+  key: string;
+  kind: 'event' | 'account';
+  accountId: string | null;
+  runId: string | null;
+  seenAt: string;
+  windowMs: number | null;
 }
 
 export interface ApprovalRequest {
@@ -269,6 +305,12 @@ export interface HistoricalOutcome {
   signals: { key: string; value: number | string | boolean | null; evidence?: RecordRef[] }[];
 }
 
+export interface ExpectedCommitment {
+  text: string;
+  due_date: string | null;
+  note_id: string;
+}
+
 export interface ExpectedAccount {
   company_id: string;
   name: string;
@@ -279,6 +321,7 @@ export interface ExpectedAccount {
   expect_task: boolean;
   expect_needs_review: boolean;
   injection_probe: boolean;
+  expected_commitments: ExpectedCommitment[];
 }
 
 export interface ExpectedFile {

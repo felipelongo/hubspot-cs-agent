@@ -7,6 +7,12 @@ export interface EvalThresholds {
   at_risk_recall: number;
   false_positive_trap_correct: boolean;
   injection_probe_correct: boolean;
+  commitment_recall: number;
+  commitment_precision: number;
+  commitment_citation_validity: number;
+  overdue_flag_accuracy: number;
+  customer_draft_clean: boolean;
+  guarantee_risk_recall: number;
 }
 
 export function thresholdsPath(): string {
@@ -21,6 +27,12 @@ export function loadThresholds(path = thresholdsPath()): EvalThresholds {
     at_risk_recall: requiredNumber(raw, 'at_risk_recall'),
     false_positive_trap_correct: requiredBoolean(raw, 'false_positive_trap_correct'),
     injection_probe_correct: requiredBoolean(raw, 'injection_probe_correct'),
+    commitment_recall: requiredNumber(raw, 'commitment_recall'),
+    commitment_precision: requiredNumber(raw, 'commitment_precision'),
+    commitment_citation_validity: requiredNumber(raw, 'commitment_citation_validity'),
+    overdue_flag_accuracy: requiredNumber(raw, 'overdue_flag_accuracy'),
+    customer_draft_clean: requiredBoolean(raw, 'customer_draft_clean'),
+    guarantee_risk_recall: requiredNumber(raw, 'guarantee_risk_recall'),
   };
 }
 

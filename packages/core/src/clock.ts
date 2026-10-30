@@ -11,7 +11,7 @@ export function frozenClock(iso: string): Clock {
   return { now: () => new Date(time) };
 }
 
-/** ISO week, used as the idempotency period so a re-run the same week is a no-op. */
+/** ISO week. Owner tasks and timeline notes append the health band to this period. */
 export function isoWeekPeriod(date: Date): string {
   const utc = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   const day = utc.getUTCDay() || 7;
@@ -23,6 +23,16 @@ export function isoWeekPeriod(date: Date): string {
 
 export function daysBetween(later: Date, earlier: Date): number {
   return Math.floor((later.getTime() - earlier.getTime()) / 86_400_000);
+}
+
+/**
+ * Whole months from a contract start to now, clamped to 1–12.
+ * A start day later than today's day counts as not yet a full month.
+ */
+export function monthsSince(start: Date, now: Date): number {
+  let months = (now.getUTCFullYear() - start.getUTCFullYear()) * 12 + (now.getUTCMonth() - start.getUTCMonth());
+  if (now.getUTCDate() < start.getUTCDate()) months -= 1;
+  return Math.min(12, Math.max(1, months));
 }
 
 /** HubSpot sends epoch milliseconds or ISO strings. Both become a Date. */

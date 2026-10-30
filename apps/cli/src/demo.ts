@@ -1,7 +1,7 @@
 import { mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { repoRoot } from '@cs-agent/config';
+import { loadDotEnv, repoRoot } from '@cs-agent/config';
 import { decideApproval } from '@cs-agent/approvals';
 import { runWorkflow } from '@cs-agent/workflows';
 import { loadRuntimeConfig, systemClock } from './runtime.js';
@@ -87,10 +87,16 @@ export async function runDemo(): Promise<void> {
     (await ledger.listProposals({ state: 'awaiting_approval' })).length +
     (await ledger.listProposals({ state: 'escalated' })).length;
   console.log(`Accounts: ${run?.accounts_considered ?? 'unknown'}`);
+  console.log(demoCostLine(run?.cost_usd ?? null));
   console.log(`Committed: ${first.committed}`);
   console.log(`Awaiting: ${awaiting}`);
   console.log(`Approved proposal: ${approved.id}`);
   console.log('Open the queue with `pnpm cs serve`.');
+}
+
+function demoCostLine(cost: number | null): string {
+  if (cost == null) return 'Estimated cost: unknown (no price configured).';
+  return `Estimated cost: $${cost.toFixed(4)} (MockLLM; no API spend).`;
 }
 
 function withoutKeys(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -103,6 +109,7 @@ function withoutKeys(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 
 const entry = process.argv[1] ? resolve(process.argv[1]) : '';
 if (entry === fileURLToPath(import.meta.url)) {
+  loadDotEnv();
   runDemo().catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);

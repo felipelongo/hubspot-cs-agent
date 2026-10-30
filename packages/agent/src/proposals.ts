@@ -7,6 +7,9 @@ import {
   SIGNAL_KEYS,
   agentMarker,
   buildIdempotencyKey,
+  customerDraftExtraTerms,
+  customerDraftViolations,
+  ownerFirstName,
   parseRef,
   reasonText,
   sha256,
@@ -14,12 +17,13 @@ import {
   type AccountBundle,
   type ActionKind,
   type ActionPayload,
+  type PolicyFile,
   type Reason,
   type RecordRef,
   type ScoreResult,
   type Signal,
 } from '@cs-agent/core';
-import type { PortalConfig } from '@cs-agent/config';
+import { loadScoringRules, type PortalConfig } from '@cs-agent/config';
 
 /** A proposal with its hash already bound to the payload, still waiting for policy. */
 export interface BuiltProposal {
@@ -40,6 +44,7 @@ export function buildProposals(input: {
   score: ScoreResult;
   reasons: Reason[];
   portal: PortalConfig;
+  policy: PolicyFile;
   workflow: string;
   runId: string;
   period: string;
@@ -55,7 +60,7 @@ export function buildProposals(input: {
     return assessAccount(input, shared);
   }
   if (input.procedureId === 'draft-renewal-outreach') {
-    return [draftOutreach(input.output, shared)];
+    return draftOutreach(input.output, shared, outreachForbiddenTerms(input));
   }
   if (input.procedureId === 'extract-commitments') {
     return extractCommitments(input.output, input.portal, shared);
@@ -88,7 +93,7 @@ function assessAccount(
 ): BuiltProposal[] {
   const companyId = shared.bundle.company.ref.id;
   const names = input.portal.properties.company;
-  const propertiesKey = idempotencyKey(shared, companyId, 'set_properties');
+  const propertiesKey = idempotencyKey(shared, companyId, 'set_properties', `${input.score.score}:${input.score.band}`);
   const proposals: BuiltProposal[] = [
     sealed({
       kind: 'set_properties',
@@ -108,7 +113,7 @@ function assessAccount(
     }),
   ];
 
-  const noteKey = idempotencyKey(shared, companyId, 'note');
+  const noteKey = idempotencyKey(shared, companyId, 'note', input.score.band);
   proposals.push(
     sealed({
       kind: 'log_note',
@@ -128,7 +133,7 @@ function assessAccount(
 }
 
 function reviewTask(shared: Shared, band: string): BuiltProposal {
-  const key = idempotencyKey(shared, shared.bundle.company.ref.id, 'task');
+  const key = idempotencyKey(shared, shared.bundle.company.ref.id, 'task', band);
   // The id is inside the body, so it is chosen before the hash.
   const id = randomUUID();
   const payload = {
@@ -148,21 +153,44 @@ function reviewTask(shared: Shared, band: string): BuiltProposal {
   };
 }
 
-function draftOutreach(output: unknown, shared: Shared): BuiltProposal {
-  const draft = OutreachDraftSchema.parse(output);
-  const key = idempotencyKey(shared, shared.bundle.company.ref.id, 'outreach');
-  return sealed({
-    kind: 'draft_outreach',
-    target: shared.bundle.company.ref,
-    reasons: shared.reasons,
-    idempotencyKey: key,
-    payload: {
-      subject: draft.subject,
-      body: `${draft.body}\n${agentMarker(key)}`,
-      assignee: 'owner',
-      owner_id: ownerId(shared.bundle),
-    },
+/** Score reasons, rule ids, and cs_ property names that a customer draft must not repeat. */
+export function outreachForbiddenTerms(input: {
+  score: ScoreResult;
+  policy: PolicyFile;
+  portal: PortalConfig;
+}): string[] {
+  const rules = loadScoringRules();
+  const propertyNames = Object.values(input.portal.properties).flatMap((group) => Object.values(group));
+  return customerDraftExtraTerms({
+    ruleIds: [
+      ...rules.rules.map((rule) => rule.id),
+      ...input.policy.rules.map((rule) => rule.id),
+      ...input.score.contributions.map((item) => item.rule),
+    ],
+    reasonTexts: [...rules.rules.map((rule) => rule.label), ...input.score.contributions.map((item) => item.label)],
+    propertyNames,
   });
+}
+
+function draftOutreach(output: unknown, shared: Shared, forbidden: string[]): BuiltProposal[] {
+  const draft = OutreachDraftSchema.parse(output);
+  if (!ownerFirstName(shared.bundle.owner?.name)) return [];
+  if (customerDraftViolations({ subject: draft.subject, body: draft.body }, forbidden).length > 0) return [];
+  const key = idempotencyKey(shared, shared.bundle.company.ref.id, 'outreach');
+  return [
+    sealed({
+      kind: 'draft_outreach',
+      target: shared.bundle.company.ref,
+      reasons: shared.reasons,
+      idempotencyKey: key,
+      payload: {
+        subject: draft.subject,
+        body: draft.body,
+        assignee: 'owner',
+        owner_id: ownerId(shared.bundle),
+      },
+    }),
+  ];
 }
 
 function extractCommitments(output: unknown, portal: PortalConfig, shared: Shared): BuiltProposal[] {
@@ -274,13 +302,13 @@ function sealed(input: {
   };
 }
 
-function idempotencyKey(shared: Shared, companyId: string, action: string): string {
+function idempotencyKey(shared: Shared, companyId: string, action: string, suffix?: string): string {
   return buildIdempotencyKey({
     workflow: shared.workflow,
     object: 'company',
     id: companyId,
     action,
-    period: shared.period,
+    period: suffix ? `${shared.period}:${suffix}` : shared.period,
   });
 }
 

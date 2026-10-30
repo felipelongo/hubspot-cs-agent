@@ -17,7 +17,7 @@ function activity(partial: Partial<ActivitySnapshot> & Pick<ActivitySnapshot, 'r
 function contact(partial: Partial<ContactSnapshot> & Pick<ContactSnapshot, 'ref' | 'name'>): ContactSnapshot {
   return {
     email: 'person@example.com',
-    role: 'end_user',
+    role: 'other',
     left_company: false,
     properties: {},
     ...partial,
@@ -34,15 +34,22 @@ function baseBundle(overrides: Partial<AccountBundle> = {}): AccountBundle {
       employees: 40,
       plan: 'Team',
       arr: 24000,
-      seats_purchased: 20,
-      seats_active: 18,
-      last_login_at: '2026-10-28T00:00:00.000Z',
+      contract_start: '2026-01-28',
+      guarantee_multiple: 10,
+      attributed_gifts_ytd: 260000,
+      hot_leads_delivered_90d: 20,
+      hot_leads_followed_up_90d: 18,
+      hot_leads_unworked: 2,
+      oldest_unworked_lead_days: 3,
+      last_dashboard_login_at: '2026-10-28T00:00:00.000Z',
+      alert_open_rate_30d: 0.6,
+      fiscal_year_start_month: 7,
       owner_id: 'owner-1',
       seed_csm: 'Avery Quinn',
       external_id: 'co-1',
       properties: {},
     },
-    contacts: [contact({ ref: ref('contact', 'p-1'), name: 'Mina Cho', role: 'champion', email: 'mina.cho@example.com' })],
+    contacts: [contact({ ref: ref('contact', 'p-1'), name: 'Mina Cho', role: 'development_director', email: 'mina.cho@example.com' })],
     deals: [],
     renewal_deal: {
       ref: ref('deal', 'd-1'),
@@ -126,10 +133,23 @@ describe('computeSignals', () => {
     expect(signals.find((signal) => signal.key === SIGNAL_KEYS.budgetRiskLanguage)?.value).toBe(false);
   });
 
-  it('flags budget language, a departed champion, and missing usage', () => {
+  it('flags budget language, a departed development director, and missing platform data', () => {
+    const company = baseBundle().company;
     const bundle = baseBundle({
-      company: { ...baseBundle().company, seats_active: null, seats_purchased: null },
-      contacts: [contact({ ref: ref('contact', 'p-left'), name: 'Jonah Pell', role: 'champion', left_company: true })],
+      company: {
+        ...company,
+        contract_start: null,
+        guarantee_multiple: null,
+        attributed_gifts_ytd: null,
+        hot_leads_delivered_90d: null,
+        hot_leads_followed_up_90d: null,
+        hot_leads_unworked: null,
+        oldest_unworked_lead_days: null,
+        last_dashboard_login_at: null,
+        alert_open_rate_30d: null,
+        fiscal_year_start_month: null,
+      },
+      contacts: [contact({ ref: ref('contact', 'p-left'), name: 'Jonah Pell', role: 'development_director', left_company: true })],
       activities: [
         activity({
           ref: ref('note', 'n-budget'),
@@ -142,8 +162,37 @@ describe('computeSignals', () => {
     const signals = computeSignals(bundle, clock);
     expect(signals.find((signal) => signal.key === SIGNAL_KEYS.budgetRiskLanguage)?.value).toBe(true);
     expect(signals.find((signal) => signal.key === SIGNAL_KEYS.championLeft)?.value).toBe(true);
-    expect(signals.find((signal) => signal.key === SIGNAL_KEYS.missingUsageData)?.value).toBe(true);
-    expect(signals.find((signal) => signal.key === SIGNAL_KEYS.usageRatio)?.value).toBeNull();
+    expect(signals.find((signal) => signal.key === SIGNAL_KEYS.missingPlatformData)?.value).toBe(true);
+    expect(signals.find((signal) => signal.key === SIGNAL_KEYS.roiPace)?.value).toBeNull();
+  });
+
+  it('names a replacement from a departure auto-reply and cites the bounced champion email', () => {
+    const bundle = baseBundle({
+      activities: [
+        activity({
+          ref: ref('email', 'e-left'),
+          kind: 'email',
+          occurred_at: '2026-09-10T00:00:00.000Z',
+          direction: 'inbound',
+          body: "I'm no longer with Inkferry Conservation. For major gifts, please contact Willa Hart at willa.hart@example.org.",
+        }),
+        activity({
+          ref: ref('email', 'e-bounce'),
+          kind: 'email',
+          occurred_at: '2026-10-20T00:00:00.000Z',
+          direction: 'bounced',
+          title: 'Message to Mina Cho',
+          body: 'Delivery failed. The mailbox is unavailable.',
+        }),
+      ],
+    });
+    const signals = computeSignals(bundle, clock);
+    const left = signals.find((signal) => signal.key === SIGNAL_KEYS.championLeft);
+    expect(left?.value).toBe(true);
+    expect(left?.explanation).toContain('Willa Hart');
+    expect(left?.evidence).toEqual(expect.arrayContaining([ref('email', 'e-bounce'), ref('email', 'e-left')]));
+    const pace = signals.find((signal) => signal.key === SIGNAL_KEYS.roiPace);
+    expect(pace?.value).toBeGreaterThan(0.8);
   });
 
   it('sees a future meeting as booked and ignores closed tickets', () => {

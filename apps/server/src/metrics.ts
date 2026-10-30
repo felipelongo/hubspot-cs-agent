@@ -2,7 +2,7 @@ import type { ProposedAction } from '@cs-agent/core';
 import type { PortalConfig } from '@cs-agent/config';
 
 export const METRICS_ASSUMPTION =
-  'Assumes 25 minutes of CSM time saved for each at-risk or critical account assessed (health review and a note).';
+  'Assumes 25 minutes of CSM time saved for each at-risk or critical client assessed (health review and a note).';
 
 const MINUTES_PER_ACCOUNT = 25;
 const BANDS = ['healthy', 'watch', 'at_risk', 'critical'] as const;

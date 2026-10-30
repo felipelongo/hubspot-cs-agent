@@ -270,6 +270,18 @@ export class MockHubSpot implements HubSpotPort {
     });
   }
 
+  async archiveProperty(object: ObjectType, name: string): Promise<void> {
+    return this.run(() => {
+      const list = this.propertyDefs.get(object) ?? [];
+      if (!list.some((item) => item.name === name)) return;
+      this.writeCount += 1;
+      this.propertyDefs.set(
+        object,
+        list.filter((item) => item.name !== name),
+      );
+    });
+  }
+
   async ensurePipeline(
     object: 'deal' | 'ticket',
     spec: { label: string; stages: { label: string }[] },
@@ -428,6 +440,8 @@ function matchesFilter(properties: Record<string, string | null>, filter: Search
     case 'CONTAINS_TOKEN':
       if (value == null || !filter.value) return false;
       return value.toLowerCase().includes(filter.value.toLowerCase());
+    case 'IN':
+      return value != null && (filter.values ?? []).includes(value);
     default:
       return false;
   }

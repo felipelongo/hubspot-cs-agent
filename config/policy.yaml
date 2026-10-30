@@ -1,17 +1,25 @@
 # What can happen on its own, what needs a human, and what goes to the CS lead.
 # First matching rule wins. needs_review is first so a bad citation is never auto-written.
-# A critical account (or a large at-risk account) is escalated before the "safe write" rules.
-version: 1.0.0
+version: 2.0.0
 rules:
   - id: needs_review_needs_a_human
     comment: A citation failure or missing data is never auto-committed.
     when: { needs_review: true }
     then: approval
 
-  - id: critical_or_large_at_risk
-    comment: The CS lead sees critical accounts, and at-risk accounts at or above this ARR.
+  - id: critical_goes_to_the_lead
+    comment: The CS lead sees every critical client.
     when: { band: critical }
-    or_when: { band: at_risk, arr_gte: 50000 }
+    then: escalate
+
+  - id: guarantee_refund_exposure
+    comment: Attributed gifts under half the guarantee pace can become a refund.
+    when: { signal: roi_pace, lt: 0.5 }
+    then: escalate
+
+  - id: at_risk_near_renewal
+    comment: An at-risk client renewing within 60 days goes to the CS lead.
+    when: { band: at_risk, signal: days_to_renewal, lte: 60 }
     then: escalate
 
   - id: health_properties_are_safe_to_write

@@ -1,28 +1,28 @@
 {
   "charter": {
-    "version": "1.0.0",
-    "sha256": "5eed16c1d61a082530ebc7c1529a4fe51eac8d7269b3c52d19e0be3fd1f02466"
+    "version": "1.1.0",
+    "sha256": "49d904c37aa0467d430604a56f87c8389c2ec3c0bfc4ee94434689962e0c40d6"
   },
   "procedures": {
     "assess-account-risk": {
-      "version": "1.0.0",
-      "sha256": "180523c35709b8fe3993d7e0d4f3aaf194cb28499beea158a09e28fee333ced5"
+      "version": "1.1.0",
+      "sha256": "9001dc48e98b28c3ba3e90f7955d768dc7f2bceb3e966db586afe6cf71a9edce"
     },
     "draft-renewal-outreach": {
-      "version": "1.0.0",
-      "sha256": "0e260ef60ba9920f268cf411c5366aefb9a77b7125f62e82b56d63d3540ae927"
+      "version": "1.3.0",
+      "sha256": "54ee54697c52418041975923d00f2b330795086312e420605a1e513c3149f9cc"
     },
     "escalation-brief": {
       "version": "1.0.0",
       "sha256": "8abb5b8cc28520aac9ae1d7c85cc3cde12db99cd17e65971f0c63993634a01be"
     },
     "extract-commitments": {
-      "version": "1.0.0",
-      "sha256": "74eddb9fc2fc076c3081e08d604881e9ad062b9419abeee4fd785ee6b10b3743"
+      "version": "1.1.0",
+      "sha256": "bd210f987f91fd54e30ce7f02ac60854212a8f3054ba8c97a0920898544e143d"
     },
     "prepare-qsr": {
-      "version": "0.1.0",
-      "sha256": "4b424cd5018227d90cf4eadb7855ba10ec7f7a9e75d312420fac0f7e07c55782"
+      "version": "0.2.0",
+      "sha256": "0fa5dfca7e0ab9b21a1ba86ac4ba5f93602e9edb2ddc4a05d97df542c396eb69"
     }
   }
 }

@@ -21,7 +21,7 @@ const PLURAL: Record<string, string> = {
   task: 'tasks',
 };
 
-/** draft_outreach never sends mail. The task is first so a retry can see its marker. */
+/** draft_outreach never sends mail. The EMAIL task is the customer draft. The marker stays on the note. */
 export function planWrites(action: ProposedAction, portal: PortalConfig, marker: string): PlannedWrite[] {
   const company = companyRef(action);
   switch (action.kind) {

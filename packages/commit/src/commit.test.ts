@@ -31,13 +31,27 @@ class FakeHubSpot {
   updates: { record: RecordRef; properties: Record<string, string> }[] = [];
   records: { object: ObjectType; id: string; properties: Record<string, string> }[] = [];
   companies = new Map<string, Record<string, string>>();
+  links: { from: RecordRef; to: RecordRef }[] = [];
   /** 1-based createRecord attempt that throws. */
   failOnCreate: number | null = null;
   private createAttempts = 0;
 
   async getRecord(record: RecordRef): Promise<CrmRecord | null> {
-    if (record.object !== 'company') return null;
-    return { ref: record, properties: this.companies.get(record.id) ?? {} };
+    if (record.object === 'company') {
+      return { ref: record, properties: { ...(this.companies.get(record.id) ?? {}) } };
+    }
+    const row = this.records.find((item) => item.object === record.object && item.id === record.id);
+    if (!row) return null;
+    return { ref: { object: row.object, id: row.id }, properties: { ...row.properties } };
+  }
+
+  async listAssociations(from: RecordRef, to: ObjectType): Promise<RecordRef[]> {
+    const found: RecordRef[] = [];
+    for (const link of this.links) {
+      if (link.from.object === from.object && link.from.id === from.id && link.to.object === to) found.push(link.to);
+      else if (link.to.object === from.object && link.to.id === from.id && link.from.object === to) found.push(link.from);
+    }
+    return found;
   }
 
   async findMarker(_companyId: string, marker: string): Promise<RecordRef[]> {
@@ -62,7 +76,11 @@ class FakeHubSpot {
     const id = `${object}-${this.records.filter((row) => row.object === object).length + 1}`;
     const properties = write.properties;
     this.records.push({ object, id, properties });
-    return { ref: { object, id }, properties };
+    const created = { object, id };
+    for (const association of write.associations ?? []) {
+      this.links.push({ from: created, to: association.to });
+    }
+    return { ref: created, properties };
   }
 }
 
@@ -230,14 +248,16 @@ describe('commitAction', () => {
     try {
       const key = 'renewal:company:co-1:draft_outreach:2026-W44';
       const marker = agentMarker(key);
+      const subject = 'Planning ahead for your renewal';
+      const body = 'Hello, 18 of your 20 seats are active. Can we spend 20 minutes planning your renewal? [booking link]\n\nThank you,\nAvery';
       const action = actionFor({
         kind: 'draft_outreach',
         target: { object: 'company', id: 'co-1' },
         idempotency_key: key,
         state: 'approved',
         payload: {
-          subject: 'Checking in',
-          body: `Hello from the account team. ${marker}`,
+          subject,
+          body,
           owner_id: 'owner-1',
           assignee: 'owner',
         },
@@ -259,13 +279,18 @@ describe('commitAction', () => {
       });
       const fake = new FakeHubSpot();
       const result = await commitAction({ action, hubspot: hubspot(fake), ledger: db, mode: 'live', portal });
+      const again = await commitAction({ action, hubspot: hubspot(fake), ledger: db, mode: 'live', portal });
       expect(result.outcome).toBe('committed');
+      expect(again.outcome).toBe('replayed');
+      expect(fake.writeCount).toBe(2);
       expect(fake.objects).not.toContain('email');
       expect(fake.objects).toContain('task');
       const task = fake.records.find((row) => row.object === 'task');
       const note = fake.records.find((row) => row.object === 'note');
       expect(task?.properties[portal.properties.task.type]).toBe('EMAIL');
-      expect(task?.properties[portal.properties.task.body]).toContain(marker);
+      expect(task?.properties[portal.properties.task.subject]).toBe(subject);
+      expect(task?.properties[portal.properties.task.body]).toBe(body);
+      expect(task?.properties[portal.properties.task.body]).not.toContain('[cs-agent:');
       expect(note?.properties[portal.properties.note.body]).toContain('A human must send this from HubSpot');
       expect(note?.properties[portal.properties.note.body]).toContain(marker);
     } finally {
@@ -278,13 +303,15 @@ describe('commitAction', () => {
     try {
       const key = 'renewal:company:co-1:draft_outreach:2026-W44';
       const marker = agentMarker(key);
+      const subject = 'Planning ahead for your renewal';
+      const body = 'Hello, 18 of your 20 seats are active. Can we spend 20 minutes planning your renewal? [booking link]\n\nThank you,\nAvery';
       const action = actionFor({
         kind: 'draft_outreach',
         target: { object: 'company', id: 'co-1' },
         idempotency_key: key,
         payload: {
-          subject: 'Checking in',
-          body: `Hello from the account team. ${marker}`,
+          subject,
+          body,
           owner_id: 'owner-1',
           assignee: 'owner',
         },
@@ -312,9 +339,31 @@ describe('commitAction', () => {
       expect(second.outcome).toBe('committed');
       expect(fake.records.filter((row) => row.object === 'task')).toHaveLength(1);
       expect(fake.records.filter((row) => row.object === 'note')).toHaveLength(1);
+      const task = fake.records.find((row) => row.object === 'task');
+      expect(task?.properties[portal.properties.task.body]).toBe(body);
+      expect(task?.properties[portal.properties.task.body]).not.toContain(marker);
+      expect(fake.records.find((row) => row.object === 'note')?.properties[portal.properties.note.body]).toContain(marker);
       expect(fake.objects).not.toContain('email');
       expect(await db.hasIdempotency(key)).toBe(true);
       expect((await db.getProposal(action.id))?.state).toBe('committed');
+
+      const fresh = await ledger();
+      try {
+        await fresh.insertProposal(action);
+        const recovered = await commitAction({
+          action,
+          hubspot: hubspot(fake),
+          ledger: fresh,
+          mode: 'live',
+          portal,
+        });
+        expect(recovered.outcome).toBe('replayed');
+        expect(fake.records.filter((row) => row.object === 'task')).toHaveLength(1);
+        expect(fake.records.filter((row) => row.object === 'note')).toHaveLength(1);
+        expect(fake.writeCount).toBe(2);
+      } finally {
+        await fresh.close();
+      }
     } finally {
       await db.close();
     }

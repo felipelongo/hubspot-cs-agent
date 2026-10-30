@@ -2,7 +2,7 @@
 
 Commands to set up, seed, run a sweep, and run on a schedule or a HubSpot webhook.
 
-**Why it exists.** Anyone can run the demo from one command, and a cron job can run the same command.
+**Why it exists.** Anyone can run the demo from one command, and a weekday-morning cron can run the same daily sweep.
 
 **One sentence.** "Commands to set up, seed, run a sweep, and run on a schedule or a HubSpot webhook."
 

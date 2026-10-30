@@ -6,4 +6,4 @@ Runs a procedure: gives the model read-only tools, checks its output, and turns 
 
 **One sentence.** "Runs a procedure: gives the model read-only tools, checks its output, and turns it into proposals."
 
-**Public interface.** `runProcedure({ procedureId, bundle, signals, score, llm, hubspot, ledger, policy, portal, runId, clock, workflow }) → ProposedAction[]`. `hubspot` is a `HubSpotReadPort`. Citations are checked. A second failure flags `needs_review`.
+**Public interface.** `runProcedure({ procedureId, bundle, signals, score, llm, hubspot, ledger, policy, portal, runId, clock, workflow }) → ProposedAction[]`. `hubspot` is a `HubSpotReadPort`. Citations are checked. A second citation failure flags `needs_review`. A customer draft that still leaks internal text after one rewrite is not proposed.

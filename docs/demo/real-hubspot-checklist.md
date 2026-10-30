@@ -26,7 +26,7 @@ HubSpot often refuses to create users from the API. The seed maps every owner to
    If the Renewals pipeline is missing, the findings list names it. Create it, or let the seed step create it.
 
 3. **Seed.** `pnpm cs seed --target hubspot`  
-   Expect: a summary of companies, contacts, deals, tickets, and activities. Emails are `@example.com`.  
+   Expect: a summary of companies, contacts, deals, tickets, and activities. Emails are `@example.org`. Setup reports whether it archived `seats_purchased`, `seats_active`, and `last_login_at`.  
    Run it again. Expect: upserts, not duplicates. Records carry `seed_external_id`.
 
 4. **Shadow sweep.** `pnpm cs sweep renewal-risk-sweep --mode shadow --limit 5`  
@@ -44,7 +44,7 @@ HubSpot often refuses to create users from the API. The seed maps every owner to
    Expect: a HubSpot task of type EMAIL assigned to the owner, and a note. No email is sent.
 
 8. **Re-run.** The same command as step 6.  
-   Expect: `replayed` on the commits, and no second task or note. Search the company timeline for `[cs-agent:`.
+   Expect: `replayed` on the commits, and no second task or note. The `[cs-agent:` marker is on the internal note, not the email task. Search the company timeline for `[cs-agent:`.
 
 9. **Reset when you are done practicing.** `pnpm cs seed:reset` archives records that have `seed_external_id`. It does not archive the rest of the portal.
 

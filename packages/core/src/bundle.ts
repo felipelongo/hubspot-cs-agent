@@ -13,20 +13,37 @@ export interface CompanySnapshot {
   employees: number | null;
   plan: string | null;
   arr: number | null;
-  seats_purchased: number | null;
-  seats_active: number | null;
-  last_login_at: string | null;
+  contract_start: string | null;
+  guarantee_multiple: number | null;
+  attributed_gifts_ytd: number | null;
+  hot_leads_delivered_90d: number | null;
+  hot_leads_followed_up_90d: number | null;
+  hot_leads_unworked: number | null;
+  oldest_unworked_lead_days: number | null;
+  last_dashboard_login_at: string | null;
+  alert_open_rate_30d: number | null;
+  fiscal_year_start_month: number | null;
   owner_id: string | null;
   seed_csm: string | null;
   external_id: string | null;
   properties: Record<string, string | null>;
 }
 
+export const CONTACT_ROLES = [
+  'development_director',
+  'executive_director',
+  'major_gifts_officer',
+  'database_admin',
+  'other',
+] as const;
+
+export type ContactRole = (typeof CONTACT_ROLES)[number];
+
 export interface ContactSnapshot {
   ref: RecordRef;
   name: string;
   email: string;
-  role: 'champion' | 'economic_buyer' | 'admin' | 'end_user' | 'other';
+  role: ContactRole;
   left_company: boolean;
   properties: Record<string, string | null>;
 }

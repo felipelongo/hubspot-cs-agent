@@ -1,6 +1,6 @@
 ---
 id: extract-commitments
-version: 1.0.0
+version: 1.1.0
 title: Extract commitments
 purpose: List promises in the account activity, each with an owner, a due date, and a citation.
 model_tier: fast
@@ -17,15 +17,16 @@ may_propose:
 evals: evals/extract-commitments/
 changelog:
   - "1.0.0 First version. Looks for promises such as we promised and we will."
+  - "1.1.0 Also extract promises the client made, and vendor promises phrased as we'll."
 ---
 
 ## What you are doing
 
-Read the activity on the account and pull out commitments. A commitment is a promise with someone who owns it and, when the text has one, a due date.
+Read the activity on the client and pull out commitments. A commitment is a promise with someone who owns it and, when the text has one, a due date. Include promises the vendor made and promises the client made.
 
 ## Phrases to look for
 
-Look for phrases like "we promised" and "we will".
+Look for phrases like "we promised", "we will", "we'll", and "you will". A "we" promise is owned by the vendor. A "you will" promise is owned by the client.
 
 - We promised a security review by 2026-10-01.
 - We will send the renewal deck by 2026-12-01.

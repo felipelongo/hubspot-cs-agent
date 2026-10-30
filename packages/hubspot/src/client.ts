@@ -92,11 +92,12 @@ class HubSpotClient implements HubSpotPort {
   async search(object: ObjectType, request: SearchRequest): Promise<SearchPage> {
     // Search lags behind writes. Never use Search to confirm something you just wrote. The ledger does that.
     const filters = (request.filters ?? []).map((filter) => {
-      const entry: Record<string, string> = {
+      const entry: Record<string, unknown> = {
         propertyName: filter.property,
         operator: filter.operator,
       };
       if (filter.value !== undefined) entry.value = filter.value;
+      if (filter.values !== undefined) entry.values = filter.values;
       return entry;
     });
     const payload: Record<string, unknown> = {};
@@ -304,6 +305,15 @@ class HubSpotClient implements HubSpotPort {
     return { created: true };
   }
 
+  async archiveProperty(object: ObjectType, name: string): Promise<void> {
+    const { status, body } = await this.call({
+      method: 'DELETE',
+      path: `/crm/v3/properties/${objectPath(object)}/${encodeURIComponent(name)}`,
+    });
+    if (status === 404) return;
+    assertOk(status, body);
+  }
+
   async ensurePipeline(
     object: 'deal' | 'ticket',
     spec: { label: string; stages: { label: string }[] },
@@ -456,6 +466,9 @@ function toProperty(body: unknown): PropertyDefinition | null {
     groupName?: unknown;
     description?: unknown;
     options?: unknown;
+    hubspotDefined?: unknown;
+    calculated?: unknown;
+    modificationMetadata?: unknown;
   };
   if (typeof raw.name !== 'string') return null;
   const options = Array.isArray(raw.options)
@@ -474,7 +487,16 @@ function toProperty(body: unknown): PropertyDefinition | null {
     groupName: typeof raw.groupName === 'string' ? raw.groupName : '',
     ...(typeof raw.description === 'string' ? { description: raw.description } : {}),
     ...(options.length > 0 ? { options } : {}),
+    ...(raw.hubspotDefined === true ? { hubspotDefined: true } : {}),
+    ...(propertyReadOnly(raw) ? { readOnly: true } : {}),
   };
+}
+
+function propertyReadOnly(raw: { calculated?: unknown; modificationMetadata?: unknown }): boolean {
+  if (raw.calculated === true) return true;
+  if (!raw.modificationMetadata || typeof raw.modificationMetadata !== 'object') return false;
+  const meta = raw.modificationMetadata as { readOnlyValue?: unknown; readOnlyDefinition?: unknown };
+  return meta.readOnlyValue === true || meta.readOnlyDefinition === true;
 }
 
 function mapPropertyType(type: string): PropertyDefinition['type'] {
@@ -521,6 +543,7 @@ function propertyPayload(property: PropertyDefinition): Record<string, unknown> 
     groupName: property.groupName,
   };
   if (property.description) payload.description = property.description;
+  if (property.hasUniqueValue !== undefined) payload.hasUniqueValue = property.hasUniqueValue;
   if (property.options?.length) {
     payload.options = property.options.map((option, index) => ({
       label: option.label,

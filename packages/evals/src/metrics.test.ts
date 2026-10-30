@@ -3,6 +3,7 @@ import { collectBundleRefs, ref, withBundleHash, type AccountBundle, type ScoreR
 import {
   atRiskStats,
   citationValidity,
+  commitmentStats,
   injectionBandCorrect,
   mentionsCeoEmail,
   modelCitationsOk,
@@ -24,9 +25,16 @@ function bundle(): AccountBundle {
       employees: null,
       plan: null,
       arr: null,
-      seats_purchased: null,
-      seats_active: null,
-      last_login_at: null,
+      contract_start: null,
+      guarantee_multiple: null,
+      attributed_gifts_ytd: null,
+      hot_leads_delivered_90d: null,
+      hot_leads_followed_up_90d: null,
+      hot_leads_unworked: null,
+      oldest_unworked_lead_days: null,
+      last_dashboard_login_at: null,
+      alert_open_rate_30d: null,
+      fiscal_year_start_month: null,
       owner_id: null,
       seed_csm: null,
       external_id: null,
@@ -92,18 +100,37 @@ describe('eval bars', () => {
       at_risk_recall: 0.9,
       false_positive_trap_correct: true,
       injection_probe_correct: true,
+      commitment_recall: 1,
+      commitment_precision: 1,
+      commitment_citation_validity: 1,
+      overdue_flag_accuracy: 1,
+      customer_draft_clean: true,
+      guarantee_risk_recall: 1,
     });
     const perfect = {
       citation_validity: 1,
       at_risk_recall: 9 / 10,
       false_positive_trap_correct: true,
       injection_probe_correct: true,
+      commitments_scored: true,
+      commitment_recall: 1,
+      commitment_precision: 1,
+      commitment_citation_validity: 1,
+      overdue_flag_accuracy: 1,
+      customer_draft_clean: true,
+      guarantee_risk_recall: 1,
     };
     expect(passesThresholds(perfect, thresholds)).toBe(true);
     expect(passesThresholds({ ...perfect, at_risk_recall: 0.89 }, thresholds)).toBe(false);
     expect(passesThresholds({ ...perfect, citation_validity: 0.99 }, thresholds)).toBe(false);
     expect(passesThresholds({ ...perfect, false_positive_trap_correct: false }, thresholds)).toBe(false);
     expect(passesThresholds({ ...perfect, injection_probe_correct: false }, thresholds)).toBe(false);
+    expect(passesThresholds({ ...perfect, commitment_recall: 0.5 }, thresholds)).toBe(false);
+    expect(passesThresholds({ ...perfect, commitment_precision: 0.5 }, thresholds)).toBe(false);
+    expect(passesThresholds({ ...perfect, commitment_citation_validity: 0.5 }, thresholds)).toBe(false);
+    expect(passesThresholds({ ...perfect, overdue_flag_accuracy: 0.5 }, thresholds)).toBe(false);
+    expect(passesThresholds({ ...perfect, customer_draft_clean: false }, thresholds)).toBe(false);
+    expect(passesThresholds({ ...perfect, commitments_scored: false, commitment_recall: 0 }, thresholds)).toBe(true);
   });
 
   it('requires every false-positive trap to score healthy', () => {
@@ -152,26 +179,171 @@ describe('citations and the injection phrase', () => {
   });
 });
 
+function reportFixture(overrides: Partial<EvalReport> = {}): EvalReport {
+  const thresholds = loadThresholds();
+  return {
+    rows: [],
+    citation_validity: 1,
+    at_risk_recall: 0.5,
+    at_risk_precision: 1,
+    false_positive_trap_correct: true,
+    injection_probe_correct: true,
+    passed: false,
+    band_accuracy: 0.5,
+    cost_usd: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_input_tokens: 0,
+    cache_creation_input_tokens: 0,
+    model_usage: [],
+    llm: 'mock',
+    clock: '2026-10-30T12:00:00.000Z',
+    model_pass_skipped: true,
+    thresholds,
+    expected_at_risk: 2,
+    predicted_at_risk: 1,
+    true_positives: 1,
+    misses: [],
+    commitments_scored: false,
+    commitment_recall: 1,
+    commitment_precision: 1,
+    commitment_citation_validity: 1,
+    overdue_flag_accuracy: 1,
+    expected_commitments: 0,
+    predicted_commitments: 0,
+    matched_commitments: 0,
+    commitment_misses: [],
+    customer_draft_clean: true,
+    guarantee_risk_recall: 1,
+    ...overrides,
+  };
+}
+
+describe('commitment metrics', () => {
+  const asOf = '2026-10-30';
+  const note = (id: string) => `hubspot:note:${id}`;
+
+  it('scores recall, precision, note citations, and overdue flags', () => {
+    const stats = commitmentStats(
+      [
+        {
+          company_id: 'co-commit-01',
+          name: 'Vellumark',
+          note_ids: ['n-overdue', 'n-future', 'n-today', 'n-joke', 'n-filler'],
+          expected: [
+            { text: 'security review', due_date: '2026-03-15', note_id: 'n-overdue' },
+            { text: 'renewal deck', due_date: '2026-12-01', note_id: 'n-future' },
+            { text: 'QBR notes', due_date: '2026-10-30', note_id: 'n-today' },
+          ],
+          predicted: [
+            {
+              text: 'a security review',
+              due_date: '2026-03-15',
+              overdue: true,
+              citations: [note('n-overdue')],
+            },
+            {
+              text: 'We will send the renewal deck by 2026-12-01.',
+              due_date: '2026-12-01',
+              overdue: false,
+              citations: [note('n-future')],
+            },
+            {
+              text: 'share the QBR notes',
+              due_date: '2026-10-30',
+              overdue: false,
+              citations: [note('n-today')],
+            },
+          ],
+        },
+        {
+          company_id: 'co-healthy-01',
+          name: 'Brightferry',
+          note_ids: ['n-plain'],
+          expected: [],
+          predicted: [],
+        },
+      ],
+      asOf,
+    );
+    expect(stats.expected_commitments).toBe(3);
+    expect(stats.predicted_commitments).toBe(3);
+    expect(stats.matched_commitments).toBe(3);
+    expect(stats.commitment_recall).toBe(1);
+    expect(stats.commitment_precision).toBe(1);
+    expect(stats.commitment_citation_validity).toBe(1);
+    expect(stats.overdue_flag_accuracy).toBe(1);
+    expect(stats.misses).toEqual([]);
+  });
+
+  it('counts a trap extraction as a false positive and a bad citation as invalid', () => {
+    const stats = commitmentStats(
+      [
+        {
+          company_id: 'co-commit-02',
+          name: 'Wickerlane',
+          note_ids: ['n-real', 'n-joke'],
+          expected: [{ text: 'SSO', due_date: '2026-10-01', note_id: 'n-real' }],
+          predicted: [
+            { text: 'SSO', due_date: '2026-10-01', overdue: false, citations: [note('n-real')] },
+            { text: 'the moon', due_date: null, overdue: true, citations: ['hubspot:note:missing'] },
+          ],
+        },
+      ],
+      asOf,
+    );
+    expect(stats.commitment_recall).toBe(1);
+    expect(stats.commitment_precision).toBeCloseTo(0.5);
+    expect(stats.commitment_citation_validity).toBe(0);
+    expect(stats.overdue_flag_accuracy).toBe(0);
+    expect(stats.misses.map((miss) => miss.note).join(' ')).toContain('citation');
+    expect(stats.misses.map((miss) => miss.note).join(' ')).toContain('overdue');
+    expect(stats.misses.map((miss) => miss.note).join(' ')).toContain('extra');
+  });
+
+  it('treats an empty book as nothing missed', () => {
+    expect(commitmentStats([], asOf)).toEqual({
+      commitment_recall: 1,
+      commitment_precision: 1,
+      commitment_citation_validity: 1,
+      overdue_flag_accuracy: 1,
+      expected_commitments: 0,
+      predicted_commitments: 0,
+      matched_commitments: 0,
+      misses: [],
+    });
+  });
+
+  it('does not match a promise cited from the wrong note or the wrong date', () => {
+    const stats = commitmentStats(
+      [
+        {
+          company_id: 'co-commit-01',
+          name: 'Vellumark',
+          note_ids: ['n-real', 'n-other'],
+          expected: [{ text: 'security review', due_date: '2026-03-15', note_id: 'n-real' }],
+          predicted: [
+            {
+              text: 'security review',
+              due_date: '2026-12-01',
+              overdue: false,
+              citations: [note('n-other')],
+            },
+          ],
+        },
+      ],
+      asOf,
+    );
+    expect(stats.matched_commitments).toBe(0);
+    expect(stats.commitment_recall).toBe(0);
+    expect(stats.commitment_precision).toBe(0);
+    expect(stats.misses.map((miss) => miss.note).join(' ')).toContain('missed');
+  });
+});
+
 describe('eval report', () => {
   it('says when the model pass was skipped and lists misses', () => {
-    const thresholds = loadThresholds();
-    const report: EvalReport = {
-      rows: [],
-      citation_validity: 1,
-      at_risk_recall: 0.5,
-      at_risk_precision: 1,
-      false_positive_trap_correct: true,
-      injection_probe_correct: true,
-      passed: false,
-      band_accuracy: 0.5,
-      cost_usd: 0,
-      llm: 'mock',
-      clock: '2026-10-30T12:00:00.000Z',
-      model_pass_skipped: true,
-      thresholds,
-      expected_at_risk: 2,
-      predicted_at_risk: 1,
-      true_positives: 1,
+    const report = reportFixture({
       misses: [
         {
           company_id: 'co-9',
@@ -185,11 +357,76 @@ describe('eval report', () => {
           note: 'band',
         },
       ],
-    };
+      commitments_scored: true,
+      commitment_recall: 0.5,
+      commitment_precision: 1,
+      commitment_citation_validity: 1,
+      overdue_flag_accuracy: 1,
+      expected_commitments: 2,
+      predicted_commitments: 1,
+      matched_commitments: 1,
+      commitment_misses: [{ company_id: 'co-commit-01', name: 'Vellumark', note: 'missed' }],
+    });
     const markdown = renderEvalReport(report);
     expect(markdown).toContain('model pass skipped');
     expect(markdown).toContain('The demo uses the real clock');
     expect(markdown).toContain('co-9 Quiet Co');
     expect(markdown).toContain('Cost (USD): 0');
+    expect(markdown).toContain('## Commitments');
+    expect(markdown).toContain('Commitment recall');
+    expect(markdown).toContain('Overdue flag accuracy');
+    expect(markdown).toContain('co-commit-01 Vellumark');
+    expect(markdown).toContain('50.0% (1/2)');
+    expect(markdown).toContain('Customer draft clean');
+    expect(markdown).toContain('not scored');
+    expect(markdown).toContain('mock model; no API spend');
+    expect(markdown).toContain('Tokens: 0 input, 0 output, 0 total');
+  });
+
+  it('shows token totals, estimated cost, and a per-model breakdown', () => {
+    const markdown = renderEvalReport(reportFixture({
+      llm: 'real',
+      cost_usd: 9,
+      input_tokens: 1_000_000,
+      output_tokens: 1_000_000,
+      cache_read_input_tokens: 2_000_000,
+      cache_creation_input_tokens: 1_000_000,
+      model_pass_skipped: false,
+      model_usage: [
+        {
+          model: 'claude-haiku-5-5',
+          input_tokens: 1_000_000,
+          output_tokens: 1_000_000,
+          cache_read_input_tokens: 2_000_000,
+          cache_creation_input_tokens: 1_000_000,
+          cost_usd: 9,
+        },
+      ],
+    }));
+    expect(markdown).toContain('Tokens: 1000000 input, 1000000 output, 2000000 cache read, 1000000 cache write, 5000000 total');
+    expect(markdown).toContain('Cost (USD): 9');
+    expect(markdown).toContain('claude-haiku-5-5');
+    expect(markdown).not.toContain('mock model');
+  });
+
+  it('prints unknown when a real model has no configured price', () => {
+    const markdown = renderEvalReport(reportFixture({
+      llm: 'real',
+      cost_usd: null,
+      model_pass_skipped: false,
+      model_usage: [
+        {
+          model: 'fast-from-env',
+          input_tokens: 12,
+          output_tokens: 6,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cost_usd: null,
+        },
+      ],
+    }));
+    expect(markdown).toContain('Cost (USD): unknown (no price configured)');
+    expect(markdown).toContain('fast-from-env');
+    expect(markdown).toContain('unknown (no price configured)');
   });
 });

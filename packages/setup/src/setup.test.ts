@@ -28,6 +28,11 @@ describe('setupPortal', () => {
 
     expect(first.findings).toEqual([]);
     expect(first.unchanged).toEqual([]);
+    expect(first.notes).toEqual([
+      'Deprecated company property seats_purchased: not present.',
+      'Deprecated company property seats_active: not present.',
+      'Deprecated company property last_login_at: not present.',
+    ]);
     expect(first.created).toEqual([
       'cs_agent',
       portal.properties.company.health_score,
@@ -37,6 +42,18 @@ describe('setupPortal', () => {
       portal.properties.company.rules_version,
       portal.properties.company.last_run_id,
       portal.properties.company.open_commitments,
+      portal.platform.plan,
+      portal.platform.arr,
+      portal.platform.contract_start,
+      portal.platform.guarantee_multiple,
+      portal.platform.attributed_gifts_ytd,
+      portal.platform.hot_leads_delivered_90d,
+      portal.platform.hot_leads_followed_up_90d,
+      portal.platform.hot_leads_unworked,
+      portal.platform.oldest_unworked_lead_days,
+      portal.platform.last_dashboard_login_at,
+      portal.platform.alert_open_rate_30d,
+      portal.platform.fiscal_year_start_month,
     ]);
     expect(second.created).toEqual([]);
     expect(second.unchanged).toEqual(first.created);
@@ -69,6 +86,46 @@ describe('setupPortal', () => {
     expect(partial.findings).toEqual(
       portal.renewal_pipeline.stages.slice(1).map((stage) => `Renewal pipeline "Renewals" is missing stage "${stage}".`),
     );
+  });
+
+  it('archives deprecated custom properties and leaves HubSpot-defined or read-only ones', async () => {
+    const portal = loadPortalConfig();
+    const hubspot = new MockHubSpot(emptyDatabase());
+    await hubspot.createProperty('company', {
+      name: 'seats_purchased',
+      label: 'Seats purchased',
+      type: 'number',
+      fieldType: 'number',
+      groupName: 'companyinformation',
+    });
+    await hubspot.createProperty('company', {
+      name: 'seats_active',
+      label: 'Seats active',
+      type: 'number',
+      fieldType: 'number',
+      groupName: 'companyinformation',
+      hubspotDefined: true,
+    });
+    await hubspot.createProperty('company', {
+      name: 'last_login_at',
+      label: 'Last login',
+      type: 'datetime',
+      fieldType: 'date',
+      groupName: 'companyinformation',
+      readOnly: true,
+    });
+
+    const result = await setupPortal(hubspot, portal);
+
+    expect(result.notes).toEqual([
+      'Deprecated company property seats_purchased: archived.',
+      'Deprecated company property seats_active: skipped (HubSpot-defined).',
+      'Deprecated company property last_login_at: skipped (read-only).',
+    ]);
+    expect(await hubspot.getProperty('company', 'seats_purchased')).toBeNull();
+    expect(await hubspot.getProperty('company', 'seats_active')).not.toBeNull();
+    expect(await hubspot.getProperty('company', 'last_login_at')).not.toBeNull();
+    expect(await hubspot.getProperty('company', portal.platform.hot_leads_unworked)).not.toBeNull();
   });
 });
 

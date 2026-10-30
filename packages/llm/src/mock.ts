@@ -3,7 +3,7 @@ import type { LlmGenerateInput, LlmGenerateResult, LlmMessage, LlmPort } from '@
 /**
  * Deterministic stand-in for the model.
  * It reads the JSON inside <customer_data> and ignores instructions written in notes.
- * cost_usd is 0. A mock does not spend tokens, and there is no price table.
+ * cost_usd is 0 and model is "mock". This path does not call an API, so the run did not spend.
  */
 export function createMockLlm(): LlmPort {
   return {
@@ -29,11 +29,21 @@ interface Evidence {
 
 interface CustomerData {
   as_of?: string;
+  sender_first_name?: string;
   bundle?: {
-    company?: { name?: string; ref?: Evidence };
+    company?: {
+      name?: string;
+      ref?: Evidence;
+      seats_active?: number | null;
+      seats_purchased?: number | null;
+      hot_leads_unworked?: number | null;
+    };
     owner?: { name?: string } | null;
+    contacts?: { name?: string; role?: string; left_company?: boolean }[];
+    renewal_deal?: { close_date?: string | null } | null;
     activities?: { body?: string; ref?: Evidence }[];
   };
+  signals?: { key?: string; value?: number | boolean | string | null; explanation?: string }[];
   score?: {
     score?: number;
     band?: string;
@@ -56,7 +66,7 @@ function riskAssessment(data: CustomerData, allowed: Set<string>): unknown {
   const reasons =
     contributions.length > 0
       ? contributions.map((contribution) => ({
-          text: contribution.label || `Score contribution for the ${band} band.`,
+          text: reasonLine(contribution.label, contribution.signal_keys, data, band),
           citations: citationsFrom(contribution.evidence, company, allowed),
           signal_keys: contribution.signal_keys ?? [],
         }))
@@ -96,27 +106,95 @@ function riskAssessment(data: CustomerData, allowed: Set<string>): unknown {
   };
 }
 
+function reasonLine(
+  label: string | undefined,
+  keys: string[] | undefined,
+  data: CustomerData,
+  band: string,
+): string {
+  const base = label || `Score contribution for the ${band} band.`;
+  if (!data.signals) return base;
+  const extra = (keys ?? [])
+    .map((key) => data.signals?.find((signal) => signal.key === key)?.explanation)
+    .filter((item): item is string => Boolean(item))
+    .join(' ');
+  return extra ? `${base} ${extra}` : base;
+}
+
 function outreachDraft(data: CustomerData, allowed: Set<string>): unknown {
-  const name = data.bundle?.company?.name || 'this account';
-  const band = data.score?.band || 'watch';
+  const name = data.bundle?.company?.name || 'your team';
+  const first = senderFirstName(data);
   const company = companyRef(data);
+  const month = renewalMonth(data.bundle?.renewal_deal?.close_date);
+  const when = month
+    ? `I am writing ahead of your ${month} renewal so we can talk through the next year before that date arrives.`
+    : `I am writing ahead of your renewal so we can talk through the next year before the date arrives.`;
+  const departed = data.bundle?.contacts?.find((contact) => contact.role === 'development_director' && contact.left_company);
+  const noticed = data.signals?.find((signal) => signal.key === 'champion_left' && signal.value === true);
+  const director = data.bundle?.contacts?.find((contact) => contact.role === 'executive_director' && contact.name);
+  const unworked = data.bundle?.company?.hot_leads_unworked;
+  let fact = seatFact(data) ?? `It has been good to work with the development team at ${name}.`;
+  let hello = 'Hello,';
+  if ((departed || noticed) && director?.name && typeof unworked === 'number') {
+    hello = `Hello ${director.name},`;
+    const who = departed?.name ? `${departed.name}'s mailbox came back unavailable, so I am writing to you.` : 'I am writing to you because the development director is no longer there.';
+    fact = `${who} Could you tell me who now leads major gifts? I would like to walk through the ${unworked} waiting supporters who are ready to give.`;
+  }
+  const lines = [
+    hello,
+    '',
+    `I hope you are doing well at ${name}. ${fact} ${when} Would you have 20 minutes for a call? You can choose a time here: [booking link]. If I have the wrong person, please tell me who the right contact is.`,
+    '',
+    'Thank you,',
+  ];
+  if (first) lines.push(first);
   return {
-    subject: `${name} renewal (${band})`,
-    body: [
-      `Hello,`,
-      ``,
-      `I am checking in on ${name}. The health band on this account is ${band}.`,
-      `I would like to compare notes before the renewal.`,
-      ``,
-      `The account team`,
-    ].join('\n'),
+    subject: 'Planning ahead for your renewal',
+    body: lines.join('\n'),
     reasons: [
       {
-        text: `${name} is in the ${band} band.`,
+        text: `${name} has a renewal to plan.`,
         citations: citationsFrom(undefined, company, allowed),
       },
     ],
   };
+}
+
+function senderFirstName(data: CustomerData): string | null {
+  const explicit = data.sender_first_name?.trim().split(/\s+/)[0];
+  if (explicit) return explicit;
+  const owner = data.bundle?.owner?.name?.trim().split(/\s+/)[0];
+  return owner || null;
+}
+
+function seatFact(data: CustomerData): string | null {
+  const active = data.bundle?.company?.seats_active;
+  const purchased = data.bundle?.company?.seats_purchased;
+  if (typeof active !== 'number' || typeof purchased !== 'number') return null;
+  if (purchased <= 0 || active <= 0) return null;
+  return `${active} of your ${purchased} seats are active, and it is good to see the team in the product.`;
+}
+
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+function renewalMonth(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})/.exec(value);
+  if (!match?.[2]) return null;
+  return MONTHS[Number(match[2]) - 1] ?? null;
 }
 
 function commitmentExtract(data: CustomerData): unknown {
@@ -129,7 +207,7 @@ function commitmentExtract(data: CustomerData): unknown {
     for (const found of findPromises(activity.body)) {
       commitments.push({
         text: found.text,
-        owner,
+        owner: found.side === 'customer' ? 'customer' : owner,
         due_date: found.due,
         overdue: found.due < asOf,
         citations: [citation],
@@ -144,11 +222,16 @@ function qsrPrep(data: CustomerData, allowed: Set<string>): unknown {
   const company = citationsFrom(undefined, companyRef(data), allowed);
   return {
     experimental: true,
-    headline: `${name} quarterly review`,
+    headline: `${name} quarterly ROI review`,
     sections: [
       {
-        title: 'Account',
-        bullets: [{ text: `${name} quarterly success review outline.`, citations: company }],
+        title: 'Gifts and leads',
+        bullets: [
+          {
+            text: `${name}: leads delivered, followed up, gifts attributed, and pace versus the guarantee.`,
+            citations: company,
+          },
+        ],
       },
     ],
   };
@@ -171,14 +254,19 @@ function escalationBrief(data: CustomerData, allowed: Set<string>): unknown {
   };
 }
 
-function findPromises(body: string): { text: string; due: string }[] {
-  const found: { text: string; due: string }[] = [];
-  const patterns = [/we promised (.+?) by (\d{4}-\d{2}-\d{2})/gi, /we will (.+?) by (\d{4}-\d{2}-\d{2})/gi];
-  for (const pattern of patterns) {
-    for (const match of body.matchAll(pattern)) {
+function findPromises(body: string): { text: string; due: string; side: 'us' | 'customer' }[] {
+  const found: { text: string; due: string; side: 'us' | 'customer' }[] = [];
+  const patterns: { pattern: RegExp; side: 'us' | 'customer' }[] = [
+    { pattern: /we promised (.+?) by (\d{4}-\d{2}-\d{2})/gi, side: 'us' },
+    { pattern: /we'll (.+?) by (\d{4}-\d{2}-\d{2})/gi, side: 'us' },
+    { pattern: /we will (.+?) by (\d{4}-\d{2}-\d{2})/gi, side: 'us' },
+    { pattern: /you will (.+?) by (\d{4}-\d{2}-\d{2})/gi, side: 'customer' },
+  ];
+  for (const item of patterns) {
+    for (const match of body.matchAll(item.pattern)) {
       const text = match[1]?.trim();
       const due = match[2];
-      if (text && due) found.push({ text, due });
+      if (text && due) found.push({ text, due, side: item.side });
     }
   }
   return found;

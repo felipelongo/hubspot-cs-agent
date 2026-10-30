@@ -65,9 +65,12 @@ export function writeFixtures(clock: Clock, dir?: string): Promise<void> {
 export function setupPortal(
   hubspot: HubSpotPort,
   portal: PortalConfig,
-): Promise<{ created: string[]; unchanged: string[]; findings: string[] }> {
+): Promise<{ created: string[]; unchanged: string[]; findings: string[]; notes: string[] }> {
   const fn = required<
-    (hubspot: HubSpotPort, portal: PortalConfig) => Promise<{ created: string[]; unchanged: string[]; findings: string[] }>
+    (
+      hubspot: HubSpotPort,
+      portal: PortalConfig,
+    ) => Promise<{ created: string[]; unchanged: string[]; findings: string[]; notes: string[] }>
   >(setupMod, 'setupPortal', '@cs-agent/setup');
   return fn(hubspot, portal);
 }

@@ -15,6 +15,21 @@ afterAll(() => {
   else process.env.DATABASE_URL = savedDatabaseUrl;
 });
 
+function llmCall(runId: string, id: string, cost: number | null) {
+  return {
+    id,
+    run_id: runId,
+    procedure: 'assess-account-risk',
+    model: cost == null ? 'fast-from-env' : 'claude-haiku-5-5',
+    tier: 'fast' as const,
+    input_tokens: 100,
+    output_tokens: 20,
+    cost_usd: cost,
+    latency_ms: 5,
+    at: '2026-10-30T13:00:01.000Z',
+  };
+}
+
 function proposal(overrides: Partial<ProposedAction> = {}): ProposedAction {
   const target = overrides.target ?? { object: 'company', id: 'co-1' };
   const payload = overrides.payload ?? { properties: { cs_health_score: '47' } };
@@ -145,7 +160,82 @@ describe('ledger', () => {
     await withSql(async (ledger, sql) => {
       await ledger.migrate();
       const rows = await sql.query<{ filename: string }>('SELECT filename FROM schema_migrations ORDER BY filename');
-      expect(rows.map((row) => row.filename)).toEqual(['001_init.sql']);
+      expect(rows.map((row) => row.filename)).toEqual(['001_init.sql', '002_llm_cost_nullable.sql', '003_webhook_dedupe.sql']);
+    });
+  });
+
+  it('sums priced LLM calls and keeps an unpriced call off the run total', async () => {
+    await withSql(async (ledger) => {
+      await ledger.startRun({
+        id: 'run-priced',
+        workflow: 'renewal-risk-sweep',
+        mode: 'shadow',
+        started_at: '2026-10-30T13:00:00.000Z',
+      });
+      await ledger.logLlmCall(llmCall('run-priced', 'c1', 0.5));
+      await ledger.logLlmCall(llmCall('run-priced', 'c2', 0.25));
+      expect(await ledger.runCost('run-priced')).toBe(0.75);
+      expect(await ledger.runCost('run-missing')).toBe(0);
+      await ledger.finishRun('run-priced', {
+        status: 'succeeded',
+        finished_at: '2026-10-30T13:05:00.000Z',
+        accounts_considered: 1,
+        proposals_created: 0,
+        commits: 0,
+        cost_usd: 0.75,
+      });
+      expect((await ledger.getRun('run-priced'))?.cost_usd).toBe(0.75);
+
+      await ledger.startRun({
+        id: 'run-unknown',
+        workflow: 'renewal-risk-sweep',
+        mode: 'shadow',
+        started_at: '2026-10-30T13:06:00.000Z',
+      });
+      await ledger.logLlmCall(llmCall('run-unknown', 'c3', 0.5));
+      await ledger.logLlmCall(llmCall('run-unknown', 'c4', null));
+      expect(await ledger.runCost('run-unknown')).toBeNull();
+      await ledger.finishRun('run-unknown', {
+        status: 'succeeded',
+        finished_at: '2026-10-30T13:07:00.000Z',
+        accounts_considered: 1,
+        proposals_created: 0,
+        commits: 0,
+        cost_usd: null,
+      });
+      expect((await ledger.getRun('run-unknown'))?.cost_usd).toBeNull();
+    });
+  });
+
+  it('claims an event once and refreshes an account key after the window', async () => {
+    await withSql(async (ledger) => {
+      const seen = '2026-10-30T12:00:00.000Z';
+      const event = {
+        key: 'event:1',
+        kind: 'event' as const,
+        accountId: null,
+        runId: null,
+        seenAt: seen,
+        windowMs: null,
+      };
+      expect(await ledger.claimWebhookDedupe(event)).toBe(true);
+      expect(await ledger.claimWebhookDedupe({ ...event, seenAt: '2026-10-30T13:00:00.000Z' })).toBe(false);
+
+      const account = {
+        key: 'account:co-1',
+        kind: 'account' as const,
+        accountId: 'co-1',
+        runId: 'run-1',
+        seenAt: seen,
+        windowMs: 60_000,
+      };
+      expect(await ledger.claimWebhookDedupe(account)).toBe(true);
+      expect(
+        await ledger.claimWebhookDedupe({ ...account, runId: 'run-2', seenAt: '2026-10-30T12:00:30.000Z' }),
+      ).toBe(false);
+      expect(
+        await ledger.claimWebhookDedupe({ ...account, runId: 'run-3', seenAt: '2026-10-30T12:01:00.000Z' }),
+      ).toBe(true);
     });
   });
 

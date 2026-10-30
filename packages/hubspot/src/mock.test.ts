@@ -77,6 +77,12 @@ describe('MockHubSpot', () => {
     });
     expect(hasDomain.results.map((record) => record.ref.id).sort()).toEqual(['a', 'c']);
 
+    const included = await hubspot.search('company', {
+      filters: [{ property: 'name', operator: 'IN', values: ['Beta', 'Ace Widgets'] }],
+      limit: 10,
+    });
+    expect(included.results.map((record) => record.ref.id).sort()).toEqual(['b', 'c']);
+
     const missingDomain = await hubspot.search('company', {
       filters: [{ property: 'domain', operator: 'NOT_HAS_PROPERTY' }],
       limit: 10,

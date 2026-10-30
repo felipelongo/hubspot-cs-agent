@@ -7,6 +7,20 @@ function matches(match: PolicyMatch, ctx: PolicyContext): boolean {
   if (match.band && match.band !== ctx.band) return false;
   if (match.arr_gte != null && (ctx.arr == null || ctx.arr < match.arr_gte)) return false;
   if (match.needs_review != null && match.needs_review !== ctx.needs_review) return false;
+  if (match.signal && !signalMatches(match, ctx.signals[match.signal])) return false;
+  return true;
+}
+
+function signalMatches(match: PolicyMatch, value: number | boolean | string | null | undefined): boolean {
+  if (value == null) return false;
+  if (match.eq !== undefined && value !== match.eq) return false;
+  if (typeof value !== 'number') {
+    return match.lt == null && match.lte == null && match.gt == null && match.gte == null;
+  }
+  if (match.lt != null && !(value < match.lt)) return false;
+  if (match.lte != null && !(value <= match.lte)) return false;
+  if (match.gt != null && !(value > match.gt)) return false;
+  if (match.gte != null && !(value >= match.gte)) return false;
   return true;
 }
 

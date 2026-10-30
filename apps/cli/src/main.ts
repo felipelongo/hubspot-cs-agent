@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import { systemClock, type RunMode } from '@cs-agent/core';
-import { loadScoringRules } from '@cs-agent/config';
+import { systemClock, type LedgerPort, type RunMode } from '@cs-agent/core';
+import { loadDotEnv, loadScoringRules, type PortalConfig } from '@cs-agent/config';
 import { decideApproval, editProposal } from '@cs-agent/approvals';
 import { runWorkflow, type WorkflowName } from '@cs-agent/workflows';
 import { startServer } from '../../server/src/index.js';
@@ -75,6 +75,7 @@ async function setup(env: NodeJS.ProcessEnv): Promise<void> {
   console.log(`Unchanged ${result.unchanged.length}.`);
   console.log(`Findings ${result.findings.length}:`);
   for (const line of result.findings) console.log(`  ! ${line}`);
+  for (const line of result.notes) console.log(line);
 }
 
 async function seed(target: string, env: NodeJS.ProcessEnv): Promise<void> {
@@ -115,9 +116,46 @@ async function sweep(name: string | undefined, flags: Map<string, string | boole
     rules: runtime.rules,
     clock: runtime.clock,
   });
+  const saved = await runtime.ledger.getRun(result.runId);
   console.log(
-    `Run ${result.runId}: proposals ${result.proposals}, committed ${result.committed}, replayed ${result.replayed}, awaiting ${result.awaiting}.`,
+    `Run ${result.runId}: proposals ${result.proposals}, committed ${result.committed}, replayed ${result.replayed}, awaiting ${result.awaiting}. Estimated cost ${formatSweepCost(saved?.cost_usd ?? null, env)}.`,
   );
+  const accountId = stringFlag(flags, 'account');
+  if (accountId) console.log(await formatAccountSweep(runtime.ledger, runtime.portal, accountId));
+}
+
+async function formatAccountSweep(ledger: LedgerPort, portal: PortalConfig, accountId: string): Promise<string> {
+  const proposals = await ledger.listProposals({ account_id: accountId });
+  const scored = [...proposals].reverse().find((proposal) => proposal.kind === 'set_properties');
+  const properties =
+    scored?.payload.properties && typeof scored.payload.properties === 'object'
+      ? (scored.payload.properties as Record<string, string>)
+      : {};
+  const score = properties[portal.properties.company.health_score];
+  const band = properties[portal.properties.company.health_band];
+  const focused = scored ? proposals.filter((proposal) => proposal.run_id === scored.run_id) : [];
+  const lines: string[] = [];
+  if (score && band) lines.push(`Score ${score} / ${band}`);
+  for (const proposal of focused) {
+    lines.push(`${proposal.kind} ${proposal.policy_decision.effect} (${proposal.policy_decision.rule_id})`);
+  }
+  for (const reason of scored?.reasons ?? []) {
+    const cites = reason.citations.map((citation) => `${citation.object}:${citation.id}`).join(', ');
+    lines.push(`reason: ${reason.text} [${cites}]`);
+  }
+  const draft = focused.find((proposal) => proposal.kind === 'draft_outreach');
+  if (typeof draft?.payload.body === 'string') {
+    lines.push('draft:');
+    lines.push(draft.payload.body);
+  }
+  return lines.join('\n');
+}
+
+function formatSweepCost(cost: number | null, env: NodeJS.ProcessEnv): string {
+  if (cost == null) return 'unknown (no price configured)';
+  const amount = `$${cost.toFixed(4)}`;
+  if (!env.ANTHROPIC_API_KEY) return `${amount} (mock model; no API spend)`;
+  return amount;
 }
 
 async function approve(id: string | undefined, flags: Map<string, string | boolean>, env: NodeJS.ProcessEnv): Promise<void> {
@@ -178,15 +216,18 @@ async function backtest(since: string | undefined): Promise<void> {
 
 async function serve(flags: Map<string, string | boolean>, env: NodeJS.ProcessEnv): Promise<void> {
   const runtime = await createRuntime(env);
-  const port = numberFlag(flags, 'port') ?? Number(env.PORT || 3000);
+  const port = numberFlag(flags, 'port') ?? Number(env.PORT || 8787);
   startServer(
     {
       ledger: runtime.ledger,
       hubspot: runtime.hubspot,
       portal: runtime.portal,
       policy: runtime.policy,
+      rules: runtime.rules,
+      llm: runtime.llm,
       clock: runtime.clock,
       password: env.CONSOLE_PASSWORD || 'demo',
+      env,
     },
     port,
   );
@@ -200,6 +241,7 @@ function readMode(value: string): RunMode {
 const entry = process.argv[1] ? resolve(process.argv[1]) : '';
 const self = fileURLToPath(import.meta.url);
 if (entry === self) {
+  loadDotEnv();
   main().catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);

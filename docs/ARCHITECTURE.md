@@ -29,9 +29,9 @@ flowchart LR
   Ledger --> Commit --> HS
 ```
 
-The model sits inside the LLM port. Its tools are `hubspot_read_record`, `hubspot_list_associations`, and `propose_action`. It never receives `createRecord`, `updateRecord`, or `batchUpsert`.
+The model sits inside the LLM port. Its tools are `hubspot_read_record`, `hubspot_list_associations`, and `propose_action`. It never receives `createRecord`, `updateRecord`, or `batchUpsert`. `propose_action` is pushed onto a list the runner never reads, so it is not where actions come from. The runner builds proposals from the validated procedure output. An outreach draft becomes `draft_outreach`. Overdue commitments become tasks. A QSR prep becomes a note. An escalation brief becomes `escalate`. The renewal assessment ignores `recommended_actions`. It always proposes a score write and a note, and it adds an owner task when the band is at risk or critical, or when renewal is within 21 days and no meeting is booked. Where the schema has reasons, citations are checked before they are stored. Policy then marks each proposal auto, approval, or escalate.
 
-## One sweep
+## Daily sweep
 
 ```mermaid
 sequenceDiagram
@@ -50,6 +50,7 @@ sequenceDiagram
   Sweep->>Commit: auto-approved only
   Commit->>HubSpot: write if hash and idempotency key agree
   Note over Sweep,Ledger: drafts and escalations wait in the console
+  Note over Sweep: daily sweep on weekday mornings; tomorrow's sweep writes nothing when the band is unchanged
 ```
 
 ## Action states
@@ -92,7 +93,7 @@ flowchart TB
   Customer[Notes, emails, tickets]
   Customer -->|fenced as data| Prompt
   Prompt --> Model
-  Model -->|read tools and propose_action| Runner
+  Model -->|read tools and structured output| Runner
   Runner -->|validated citations and action_hash| Ledger
   Human[Human in the console]
   Human -->|approval stores the hash| Ledger
@@ -104,7 +105,7 @@ Customer text cannot become an instruction. A seeded note tells the model to ign
 
 ## Blocks
 
-Each folder has a README with the same one-sentence description.
+Each folder has a README. The lines below describe what that block does.
 
 | Block | One sentence |
 | --- | --- |
@@ -116,7 +117,7 @@ Each folder has a README with the same one-sentence description.
 | Signals | Turns raw records into facts like "no meeting in 47 days" or "3 open high-severity tickets." |
 | Scoring | A versioned, explainable health score; each point traces to a signal and a record. |
 | Procedures | The agent's playbooks: versioned instructions for each job, like an SOP library. |
-| LLM port | One interface to the model, with structured outputs, retries and cost logging. |
+| LLM port | One interface to the model, with structured outputs and retries. Per-call cost is token usage from the Anthropic SDK usage block times that model's USD price in `config/model-prices.yaml` (model ids from `LLM_MODEL_FAST` and `LLM_MODEL_STRONG`, for example `claude-haiku-5-5` and `claude-sonnet-5-5`). The sum is stored on the run and printed by `pnpm eval`. |
 | Agent runner | Runs a procedure, checks its output, and turns it into proposals. |
 | Ledger | The system's memory and audit trail: every run, proposal, approval and write. |
 | Policy | The rules for what can happen automatically, what needs a human, and what goes to a manager. |
@@ -124,20 +125,20 @@ Each folder has a README with the same one-sentence description.
 | Approvals | Where humans say yes or no. A web console today; Slack can be added behind the same interface. |
 | Workflows | Chains the blocks into a job, for example the renewal-risk sweep. |
 | Console | A small web app: approval queue, runs, audit log, metrics. |
-| CLI | Commands to set up, seed, run a sweep, and run on a schedule or a webhook. |
+| CLI | Commands to set up, seed, run a sweep, approve, evaluate, backtest, and serve the console. |
 | Seed | A fictional customer base with planted problems, so the demo and tests have known answers. |
 | Evals | Checks the agent gets the known answers right. The same scorer backtests history. |
 
 ## Safety choices that are deliberate
 
-- `draft_outreach` never sends email. After approval it becomes a HubSpot task of type EMAIL, plus a note. A person sends it from HubSpot.
+- `draft_outreach` never sends email. After approval it becomes a HubSpot task of type EMAIL, plus an internal note. A person sends the email from HubSpot. The task text is the customer draft. The note holds the idempotency marker.
 - `update_deal_stage` exists and is policy-gated to approval. The renewal sweep does not move stages.
 - `mode: shadow` proposes and logs, and writes nothing. `dry_run` prints the request. `live` commits what policy allows.
-- Idempotency keys look like `renewal-risk:company:<id>:task:<iso-week>`. The ledger is the primary duplicate check. A marker `[cs-agent:<key>]` in the HubSpot body is the backup if the database is lost.
+- Idempotency keys for owner tasks and timeline notes look like `renewal-risk:company:<id>:task:2026-W44:at_risk`. The health band is part of the key, so an unchanged client gets at most one task and one note per week, and a worse band in that week gets a new task and note the same day. Health property keys include the score and the band (`renewal-risk:company:<id>:set_properties:2026-W44:72:watch`). A changed value is written. An unchanged value is a no-op. The ledger is the primary duplicate check. A marker `[cs-agent:<key>]` on internal notes, tasks, and properties uses that same key. The customer email task for `draft_outreach` does not carry that marker. A retry recognizes it by the approved subject and body.
 - An approval stores `action_hash`, the sha256 of the canonical JSON of `{kind, target, payload}`. An edit supersedes the old proposal. The new one needs its own approval. Commit refuses a hash mismatch.
-- Health points are subtracted in `config/scoring-rules.yaml` (`rules_version: 1.0.0`), starting at 100. The model writes the reasons. It does not pick the number.
+- Health points are subtracted in `config/scoring-rules.yaml` (`rules_version: 2.0.0`), starting at 100. The model writes the reasons. It does not pick the number.
 - Search is not used to confirm a write. Search lags. The ledger and the marker do that job.
-- Missing usage data is its own signal and forces `needs_review`. It is never treated as healthy.
+- Missing platform data is its own signal and forces `needs_review`. It is never treated as healthy. Platform fields are the contract, the guarantee, attributed gifts, hot-lead follow-up, dashboard login, alert open rate, and the fiscal-year month.
 
 ## Modes and adapters
 
@@ -151,14 +152,15 @@ Each folder has a README with the same one-sentence description.
 
 ## Schedule and webhook
 
-A weekday morning sweep:
+The renewal-risk sweep is a daily sweep on weekday mornings. There is no scheduler process in this repo. The cron block below is what a deployer installs on a host with a persistent database:
 
 ```cron
+# Daily sweep, weekday mornings. Tomorrow's sweep writes nothing when the band is unchanged.
 CRON_TZ=America/New_York
 0 7 * * 1-5 cd /path/to/cs-agent && pnpm cs sweep renewal-risk-sweep --mode live
 ```
 
-On Vercel, the same command is the cron target. The console's `POST /webhooks/hubspot` checks the v3 signature (`X-HubSpot-Signature-v3`, timestamp within 5 minutes) and answers 202. Wiring that stub to a single-account sweep is the next step, not this demo.
+Hosted deployment is future work. Vercel, for example, needs a hosted Postgres instead of the default local PGlite file (`data/pglite`), which would not persist there. The console's `POST /webhooks/hubspot` checks the v3 signature (`X-HubSpot-Signature-v3`, timestamp within 5 minutes), answers 202, and then starts one renewal-risk sweep per affected company in the mode set by `MODE` (shadow when unset). Company events name the company directly; contact and deal events follow their company association; other object types are ignored and listed in the response. Duplicate event ids and repeat events for the same company within `WEBHOOK_DEDUPE_WINDOW_MS` (default 15 minutes) are deduped in the ledger. No webhook subscription is registered by this repo; see `apps/server/README.md`.
 
 ## Next
 

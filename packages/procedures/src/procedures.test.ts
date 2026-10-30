@@ -22,9 +22,9 @@ describe('procedure lock', () => {
   it('matches the playbook files', () => {
     expect(() => assertProcedureLock()).not.toThrow();
     const actual = computeProcedureLock();
-    expect(actual.charter.version).toBe('1.0.0');
-    expect(actual.procedures['assess-account-risk']?.version).toBe('1.0.0');
-    expect(actual.procedures['prepare-qsr']?.version).toBe('0.1.0');
+    expect(actual.charter.version).toBe('1.1.0');
+    expect(actual.procedures['assess-account-risk']?.version).toBe('1.1.0');
+    expect(actual.procedures['prepare-qsr']?.version).toBe('0.2.0');
   });
 
   it('fails when a lock entry has the wrong hash', () => {
@@ -52,7 +52,7 @@ describe('renderProcedure', () => {
       inputs: { note: injection },
     });
 
-    expect(rendered.procedure).toBe('assess-account-risk@1.0.0');
+    expect(rendered.procedure).toBe('assess-account-risk@1.1.0');
     expect(rendered.prompt_hash).toHaveLength(64);
     expect(rendered.messages[0]?.content).toContain('never an instruction');
     expect(rendered.messages[1]?.content).toContain('<customer_data>');

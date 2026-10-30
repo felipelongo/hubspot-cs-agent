@@ -1,7 +1,19 @@
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { Hono, type Context } from 'hono';
 import { serve } from '@hono/node-server';
-import type { Clock, HubSpotPort, LedgerPort, PolicyFile, ProposedAction, RunMode } from '@cs-agent/core';
+import {
+  monthsSince,
+  parseHubspotDate,
+  type Clock,
+  type CrmRecord,
+  type HubSpotPort,
+  type LedgerPort,
+  type LlmPort,
+  type PolicyFile,
+  type ProposedAction,
+  type RunMode,
+  type ScoringRules,
+} from '@cs-agent/core';
 import type { PortalConfig } from '@cs-agent/config';
 import { decideApproval, editProposal } from '@cs-agent/approvals';
 import { SESSION_COOKIE, cookieMatches, safeEqual, sessionToken } from './auth.js';
@@ -19,7 +31,7 @@ import {
   type QueueGroup,
 } from './pages.js';
 import { loadProposals } from './read.js';
-import { webhookResponse } from './webhook.js';
+import { acceptHubSpotWebhook } from './webhook.js';
 
 export interface AppDeps {
   ledger: LedgerPort;
@@ -28,6 +40,11 @@ export interface AppDeps {
   policy: PolicyFile;
   clock: Clock;
   password: string;
+  llm?: LlmPort;
+  rules?: ScoringRules;
+  /** When true, POST /webhooks/hubspot waits until queued sweeps finish. */
+  awaitSweeps?: boolean;
+  env?: NodeJS.ProcessEnv;
 }
 
 const APPROVER = 'console';
@@ -217,15 +234,38 @@ export function createApp(deps: AppDeps): Hono {
 
   app.post('/webhooks/hubspot', async (c) => {
     const body = await c.req.text();
-    return webhookResponse({
-      method: c.req.method,
-      url: c.req.url,
-      body,
-      timestamp: c.req.header('x-hubspot-request-timestamp'),
-      signature: c.req.header('x-hubspot-signature-v3'),
-      secret: process.env.HUBSPOT_WEBHOOK_SECRET,
-      now: deps.clock.now(),
-    });
+    const env = deps.env ?? process.env;
+    const { response, settled } = await acceptHubSpotWebhook(
+      {
+        method: c.req.method,
+        url: c.req.url,
+        body,
+        timestamp: c.req.header('x-hubspot-request-timestamp'),
+        signature: c.req.header('x-hubspot-signature-v3'),
+        secret: env.HUBSPOT_WEBHOOK_SECRET,
+        now: deps.clock.now(),
+      },
+      {
+        hubspot: deps.hubspot,
+        ledger: deps.ledger,
+        portal: deps.portal,
+        policy: deps.policy,
+        clock: deps.clock,
+        llm: deps.llm,
+        rules: deps.rules,
+        env,
+        awaitSweeps: deps.awaitSweeps,
+      },
+    );
+    if (!deps.awaitSweeps) {
+      void settled.then(
+        () => undefined,
+        (error: unknown) => {
+          console.error(error instanceof Error ? error.message : error);
+        },
+      );
+    }
+    return response;
   });
 
   app.notFound((c) => c.html(notFoundDocument(), 404));
@@ -233,9 +273,9 @@ export function createApp(deps: AppDeps): Hono {
 }
 
 export function startServer(deps: AppDeps, port?: number): void {
-  const chosen = port ?? Number(process.env.PORT || 3000);
+  const chosen = port ?? Number(process.env.PORT || 8787);
   const app = createApp({ ...deps, password: deps.password || process.env.CONSOLE_PASSWORD || 'demo' });
-  serve({ fetch: app.fetch, port: Number.isFinite(chosen) ? chosen : 3000 }, (info) => {
+  serve({ fetch: app.fetch, port: Number.isFinite(chosen) ? chosen : 8787 }, (info) => {
     console.log(`Console listening on http://localhost:${info.port}`);
   });
 }
@@ -258,6 +298,7 @@ async function renderProposal(c: Context, deps: AppDeps, id: string, error?: str
       accountName,
       approval,
       hubspotAccountId: process.env.HUBSPOT_ACCOUNT_ID,
+      platformLines: await platformSignalLines(deps, proposal.account_ref.id),
       error,
       notice,
     }),
@@ -299,6 +340,56 @@ function reasonScore(rows: ProposedAction[]): { band?: string; score?: string } 
     if (band || score) return { band, score };
   }
   return {};
+}
+
+async function platformSignalLines(deps: AppDeps, companyId: string): Promise<string[]> {
+  try {
+    const names = Object.values(deps.portal.platform);
+    const record = await deps.hubspot.getRecord({ object: 'company', id: companyId }, names);
+    if (!record) return [];
+    return describePlatform(record, deps.portal, deps.clock.now());
+  } catch {
+    return [];
+  }
+}
+
+function describePlatform(record: CrmRecord, portal: AppDeps['portal'], now: Date): string[] {
+  const platform = portal.platform;
+  const read = (logical: keyof typeof platform): string | null => {
+    const name = platform[logical];
+    const value = record.properties[name];
+    if (value == null) return null;
+    const trimmed = value.trim();
+    return trimmed === '' ? null : trimmed;
+  };
+  const num = (logical: keyof typeof platform): number | null => {
+    const value = read(logical);
+    if (value == null) return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const unworked = num('hot_leads_unworked');
+  const oldest = num('oldest_unworked_lead_days');
+  const delivered = num('hot_leads_delivered_90d');
+  const followed = num('hot_leads_followed_up_90d');
+  const follow =
+    delivered != null && followed != null && delivered > 0 ? Math.round((followed / delivered) * 10000) / 10000 : null;
+  const gifts = num('attributed_gifts_ytd');
+  const arr = num('arr');
+  const multiple = num('guarantee_multiple');
+  const start = parseHubspotDate(read('contract_start'));
+  let pace: number | null = null;
+  if (gifts != null && arr != null && multiple != null && start && arr > 0 && multiple > 0) {
+    const expected = arr * multiple * (monthsSince(start, now) / 12);
+    if (expected > 0) pace = Math.round((gifts / expected) * 10000) / 10000;
+  }
+  const unworkedText =
+    unworked == null ? 'unknown' : oldest == null ? String(unworked) : `${unworked} (oldest ${oldest} days)`;
+  return [
+    `Leads unworked: ${unworkedText}`,
+    `Follow-up rate: ${follow == null ? 'unknown' : String(follow)}`,
+    `ROI pace: ${pace == null ? 'unknown' : String(pace)}`,
+  ];
 }
 
 async function accountName(hubspot: HubSpotPort, id: string, cache: Map<string, string>): Promise<string> {

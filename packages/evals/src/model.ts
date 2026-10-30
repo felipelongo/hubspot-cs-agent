@@ -3,6 +3,7 @@ import type {
   AccountBundle,
   Clock,
   HubSpotReadPort,
+  LlmGenerateResult,
   LlmPort,
   PolicyFile,
   RecordRef,
@@ -31,9 +32,25 @@ export interface ModelOutcome {
   needsReview: boolean;
 }
 
+export interface ModelUsageTotals {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
+  cost_usd: number | null;
+}
+
+export interface ModelUsageLine extends ModelUsageTotals {
+  model: string;
+}
+
 export interface PreparedModel {
-  readonly costUsd: number;
+  readonly costUsd: number | null;
+  readonly tokens: ModelUsageTotals;
+  readonly modelUsage: ModelUsageLine[];
   run(input: ModelRunInput): Promise<ModelOutcome>;
+  extractCommitments(input: ModelRunInput): Promise<unknown>;
+  draftRenewal(input: ModelRunInput): Promise<{ subject: string; body: string } | null>;
 }
 
 /**
@@ -66,12 +83,16 @@ export async function prepareModel(mode: 'mock' | 'real'): Promise<PreparedModel
   if (!created || typeof (created as LlmPort).generate !== 'function') return null;
 
   const inner = created as LlmPort;
-  let costUsd = 0;
+  const totals = emptyUsage();
+  const byModel = new Map<string, UsageBucket>();
   const generations: unknown[] = [];
   const llm: LlmPort = {
     async generate(request) {
       const result = await inner.generate(request);
-      if (mode === 'real') costUsd += result.cost_usd;
+      addUsage(totals, result);
+      const bucket = byModel.get(result.model) ?? emptyUsage();
+      addUsage(bucket, result);
+      byModel.set(result.model, bucket);
       generations.push(result.output);
       return result;
     },
@@ -80,7 +101,15 @@ export async function prepareModel(mode: 'mock' | 'real'): Promise<PreparedModel
 
   return {
     get costUsd() {
-      return mode === 'mock' ? 0 : costUsd;
+      return bucketCost(totals);
+    },
+    get tokens() {
+      return snapshot(totals);
+    },
+    get modelUsage() {
+      return [...byModel.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([model, bucket]) => ({ model, ...snapshot(bucket) }));
     },
     async run(input) {
       generations.length = 0;
@@ -105,6 +134,84 @@ export async function prepareModel(mode: 'mock' | 'real'): Promise<PreparedModel
         needsReview: outputNeedsReview(output) || generations.some((generation) => outputNeedsReview(generation)),
       };
     },
+    async draftRenewal(input) {
+      const output = await (runProcedure as (args: unknown) => Promise<unknown>)({
+        procedureId: 'draft-renewal-outreach',
+        bundle: input.bundle,
+        signals: input.signals,
+        score: input.score,
+        llm,
+        hubspot: input.hubspot,
+        ledger,
+        policy: input.policy,
+        portal: input.portal,
+        runId: `eval-draft-${input.bundle.company.ref.id}`,
+        clock: input.clock,
+        workflow: 'eval',
+      });
+      return draftPayload(output);
+    },
+    async extractCommitments(input) {
+      generations.length = 0;
+      await (runProcedure as (args: unknown) => Promise<unknown>)({
+        procedureId: 'extract-commitments',
+        bundle: input.bundle,
+        signals: input.signals,
+        score: input.score,
+        llm,
+        hubspot: input.hubspot,
+        ledger,
+        policy: input.policy,
+        portal: input.portal,
+        runId: `eval-commitments-${input.bundle.company.ref.id}`,
+        clock: input.clock,
+        workflow: 'eval',
+      });
+      return generations.at(-1);
+    },
+  };
+}
+
+interface UsageBucket {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
+  cost_usd: number;
+  unpriced: boolean;
+}
+
+function emptyUsage(): UsageBucket {
+  return {
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_input_tokens: 0,
+    cache_creation_input_tokens: 0,
+    cost_usd: 0,
+    unpriced: false,
+  };
+}
+
+function addUsage(bucket: UsageBucket, result: LlmGenerateResult): void {
+  bucket.input_tokens += result.usage.input_tokens;
+  bucket.output_tokens += result.usage.output_tokens;
+  bucket.cache_read_input_tokens += result.usage.cache_read_input_tokens ?? 0;
+  bucket.cache_creation_input_tokens += result.usage.cache_creation_input_tokens ?? 0;
+  if (result.cost_usd == null) bucket.unpriced = true;
+  else bucket.cost_usd += result.cost_usd;
+}
+
+function bucketCost(bucket: UsageBucket): number | null {
+  return bucket.unpriced ? null : bucket.cost_usd;
+}
+
+function snapshot(bucket: UsageBucket): ModelUsageTotals {
+  return {
+    input_tokens: bucket.input_tokens,
+    output_tokens: bucket.output_tokens,
+    cache_read_input_tokens: bucket.cache_read_input_tokens,
+    cache_creation_input_tokens: bucket.cache_creation_input_tokens,
+    cost_usd: bucketCost(bucket),
   };
 }
 
@@ -116,6 +223,19 @@ async function loadLedger(): Promise<unknown> {
   } catch {
     return undefined;
   }
+}
+
+function draftPayload(value: unknown): { subject: string; body: string } | null {
+  if (!Array.isArray(value)) return null;
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    if (record.kind !== 'draft_outreach' || !record.payload || typeof record.payload !== 'object') continue;
+    const payload = record.payload as Record<string, unknown>;
+    if (typeof payload.subject !== 'string' || typeof payload.body !== 'string') continue;
+    return { subject: payload.subject, body: payload.body };
+  }
+  return null;
 }
 
 function outputEscalates(value: unknown): boolean {

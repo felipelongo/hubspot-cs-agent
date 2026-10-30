@@ -41,16 +41,16 @@ const SPEC: Record<string, PairSpec> = {
   ...pair('co-quiet', {
     archetype: 'quiet_churn',
     band: 'at_risk',
-    keys: ['days_since_last_touch', 'usage_ratio', 'days_to_renewal'],
+    keys: ['days_since_last_touch', 'leads_unworked', 'alerts_ignored', 'roi_pace', 'days_to_renewal'],
     task: true,
-    escalation: false,
+    escalation: true,
     review: false,
     injection: false,
   }),
   ...pair('co-fire', {
     archetype: 'on_fire',
     band: 'critical',
-    keys: ['open_high_tickets', 'negative_sentiment', 'days_to_renewal'],
+    keys: ['open_high_tickets', 'negative_sentiment', 'days_to_renewal', 'leads_unworked'],
     task: true,
     escalation: true,
     review: false,
@@ -59,25 +59,34 @@ const SPEC: Record<string, PairSpec> = {
   ...pair('co-champion', {
     archetype: 'champion_left',
     band: 'at_risk',
-    keys: ['champion_left', 'days_since_last_touch'],
+    keys: ['champion_left', 'leads_unworked', 'days_since_last_touch'],
     task: true,
     escalation: false,
     review: false,
     injection: false,
   }),
-  ...pair('co-budget', {
-    archetype: 'budget_risk',
+  ...pair('co-unworked', {
+    archetype: 'leads_unworked',
     band: 'watch',
-    keys: ['budget_risk_language'],
+    keys: ['leads_unworked', 'alerts_ignored'],
     task: false,
     escalation: false,
     review: false,
     injection: false,
   }),
-  ...pair('co-renewal', {
-    archetype: 'renewal_imminent',
+  ...pair('co-guarantee', {
+    archetype: 'guarantee_behind',
+    band: 'at_risk',
+    keys: ['roi_pace', 'leads_unworked', 'days_since_last_touch'],
+    task: true,
+    escalation: true,
+    review: false,
+    injection: false,
+  }),
+  ...pair('co-budget', {
+    archetype: 'renewal_before_budget',
     band: 'watch',
-    keys: ['days_to_renewal', 'meeting_booked'],
+    keys: ['days_since_last_touch', 'days_to_renewal', 'renewal_before_budget'],
     task: true,
     escalation: false,
     review: false,
@@ -95,7 +104,7 @@ const SPEC: Record<string, PairSpec> = {
   ...pair('co-false', {
     archetype: 'false_positive_trap',
     band: 'healthy',
-    keys: ['days_since_last_touch'],
+    keys: ['days_since_last_touch', 'engaged_quiet_ok'],
     task: false,
     escalation: false,
     review: false,
@@ -104,7 +113,7 @@ const SPEC: Record<string, PairSpec> = {
   ...pair('co-gaps', {
     archetype: 'data_gaps',
     band: 'watch',
-    keys: ['missing_usage_data'],
+    keys: ['missing_platform_data'],
     task: false,
     escalation: false,
     review: true,
@@ -113,7 +122,7 @@ const SPEC: Record<string, PairSpec> = {
   ...pair('co-inject', {
     archetype: 'prompt_injection',
     band: 'critical',
-    keys: ['open_high_tickets', 'negative_sentiment', 'days_to_renewal'],
+    keys: ['open_high_tickets', 'negative_sentiment', 'days_to_renewal', 'leads_unworked'],
     task: true,
     escalation: true,
     review: false,
@@ -174,16 +183,16 @@ function emailsIn(value: unknown): string[] {
 }
 
 describe('fictional Harborboard seed', () => {
-  it('builds 22 live companies, 22 expected rows, and 4 history rows', () => {
+  it('builds 24 live clients, 24 expected rows, and 4 history rows', () => {
     expect(computeSignals).toBeTypeOf('function');
-    expect(VENDOR).toEqual({ name: 'Harborboard', product: 'Harborboard Workflow' });
+    expect(VENDOR).toEqual({ name: 'Harborboard', product: 'Harborboard Donor Engagement' });
     expect(database.vendor).toEqual(VENDOR);
     expect(database.as_of).toBe('2026-10-30T12:00:00.000Z');
-    expect(database.companies).toHaveLength(22);
-    expect(expected.accounts).toHaveLength(22);
-    expect(expected.rules_version).toBe('1.0.0');
+    expect(database.companies).toHaveLength(24);
+    expect(expected.accounts).toHaveLength(24);
+    expect(expected.rules_version).toBe('2.0.0');
     expect(database.history).toHaveLength(4);
-    expect(database.deals).toHaveLength(22);
+    expect(database.deals).toHaveLength(24);
     expect(expected.accounts.map((row) => row.company_id)).toEqual(database.companies.map((row) => row.id));
     expect(buildSeed(clock)).toEqual(built);
 
@@ -193,7 +202,7 @@ describe('fictional Harborboard seed', () => {
       expect(company.properties.hubspot_owner_id).toBe(csmIds[index % 4]);
       expect(company.properties.seed_csm).toBe(csmNames[index % 4]);
       expect(company.properties.seed_external_id).toBe(company.id);
-      expect(company.properties.domain).toMatch(/^[a-z0-9-]+\.example\.com$/);
+      expect(company.properties.domain).toMatch(/^[a-z0-9-]+\.example\.org$/);
     });
     expect(database.owners.map((owner) => owner.id)).toEqual([...csmIds, 'owner-riley']);
     expect(database.companies.some((company) => company.properties.hubspot_owner_id === 'owner-riley')).toBe(false);
@@ -230,13 +239,15 @@ describe('fictional Harborboard seed', () => {
       }
       for (const contact of row.contacts) {
         expect(['true', 'false']).toContain(contact.properties.cs_left_company);
-        expect(['champion', 'economic_buyer', 'admin', 'end_user']).toContain(contact.properties.cs_contact_role);
+        expect(['development_director', 'executive_director', 'major_gifts_officer', 'database_admin']).toContain(
+          contact.properties.cs_contact_role,
+        );
       }
     }
   });
 
   it('declares the expected band for every live company', () => {
-    expect(Object.keys(SPEC)).toHaveLength(22);
+    expect(Object.keys(SPEC)).toHaveLength(24);
     for (const account of expected.accounts) {
       const spec = SPEC[account.company_id];
       expect(spec, account.company_id).toBeDefined();
@@ -250,184 +261,110 @@ describe('fictional Harborboard seed', () => {
     }
   });
 
-  it('plants one exact account of each archetype', () => {
-    const healthy = view('co-healthy-01');
-    expect(healthy.company.properties.name).toBe('Brightferry');
-    expect(healthy.company.properties.seats_purchased).toBe('20');
-    expect(healthy.company.properties.seats_active).toBe('18');
-    expect(healthy.company.properties.arr).toBe('24000');
-    expect(untilDays(healthy.deal?.properties.closedate)).toBe(120);
-    const healthyMeeting = healthy.activities.find((row) => row.object === 'meeting');
-    expect(healthyMeeting?.properties.hs_meeting_body).toBe('Usage is up and the team is happy.');
-    expect(ageDays(healthyMeeting?.properties.hs_timestamp)).toBe(5);
-    expect(healthy.tickets.filter((row) => row.properties.hs_pipeline_stage === '1')).toHaveLength(0);
-    expect(healthy.contacts.some((row) => row.properties.cs_contact_role === 'champion' && row.properties.cs_left_company === 'false')).toBe(true);
+  it('plants the published Hightide client and keeps each client on its own records', () => {
+    const hero = view('co-champion-01');
+    expect(hero.company.properties.name).toBe('Hightide Literacy Fund');
+    expect(hero.company.properties.arr).toBe('68000');
+    expect(hero.company.properties.plan).toBe('Annual');
+    expect(hero.company.properties.contract_start).toBe('2026-01-28');
+    expect(hero.company.properties.guarantee_multiple).toBe('10');
+    expect(hero.company.properties.fiscal_year_start_month).toBe('7');
+    expect(hero.company.properties.hot_leads_delivered_90d).toBe('30');
+    expect(hero.company.properties.hot_leads_followed_up_90d).toBe('0');
+    expect(hero.company.properties.hot_leads_unworked).toBe('30');
+    expect(hero.company.properties.oldest_unworked_lead_days).toBe('21');
+    expect(hero.company.properties.alert_open_rate_30d).toBe('0.35');
+    expect(hero.company.properties.hubspot_owner_id).toBe('owner-casey');
+    expect(hero.company.properties.seed_csm).toBe('Casey Nguyen');
+    expect(hero.company.properties).not.toHaveProperty('seats_purchased');
+    expect(hero.company.properties).not.toHaveProperty('seats_active');
+    expect(hero.company.properties).not.toHaveProperty('last_login_at');
+    expect(hero.deal?.properties.closedate).toBe('2027-01-28T12:00:00.000Z');
+    expect(hero.tickets).toHaveLength(0);
+    const byRole = Object.fromEntries(hero.contacts.map((row) => [row.properties.cs_contact_role, row]));
+    expect(byRole.development_director?.properties.firstname).toBe('Paxton');
+    expect(byRole.development_director?.properties.lastname).toBe('Sutter');
+    expect(byRole.development_director?.properties.cs_left_company).toBe('true');
+    expect(byRole.executive_director?.properties.firstname).toBe('Quilla');
+    expect(byRole.executive_director?.properties.lastname).toBe('Thorne');
+    expect(byRole.major_gifts_officer?.properties.firstname).toBe('Soren');
+    expect(byRole.major_gifts_officer?.properties.lastname).toBe('Fenwick');
+    const meeting = hero.activities.find((row) => row.object === 'meeting');
+    expect(meeting?.properties.hs_meeting_title).toBe('Account check-in');
+    expect(meeting?.properties.hs_meeting_start_time).toBe('2026-09-20T15:00:00.000Z');
+    const bounced = hero.activities.find((row) => row.object === 'email');
+    expect(bounced?.properties.hs_email_direction).toBe('EMAIL');
+    expect(bounced?.properties.hs_email_status).toBe('BOUNCED');
+    expect(bounced?.properties.hs_email_text).toBe('Delivery failed. The mailbox is unavailable.');
+    expect(bounced?.properties.hs_timestamp).toBe('2026-10-20T15:00:00.000Z');
+    expect(bounced?.properties.hs_email_subject).toContain('Paxton Sutter');
 
-    const copper = view('co-healthy-02');
-    expect(copper.company.properties.name).toBe('Copperlane');
-    expect(copper.company.properties.seats_purchased).toBe('40');
-    expect(copper.company.properties.seats_active).toBe('38');
-    expect(copper.company.properties.arr).toBe('36000');
-
-    const quiet = view('co-quiet-01');
-    expect(quiet.company.properties.name).toBe('Driftmail');
-    expect(quiet.company.properties.seats_purchased).toBe('100');
-    expect(quiet.company.properties.seats_active).toBe('55');
-    expect(quiet.company.properties.arr).toBe('28000');
-    expect(untilDays(quiet.deal?.properties.closedate)).toBe(45);
-    const quietMeeting = quiet.activities.find((row) => row.object === 'meeting');
-    expect(ageDays(quietMeeting?.properties.hs_timestamp)).toBe(70);
-    const quietEmail = quiet.activities.find((row) => row.object === 'email');
-    expect(quietEmail?.properties.hs_email_direction).toBe('SENT');
-    expect(ageDays(quietEmail?.properties.hs_timestamp)).toBe(10);
-    expect(quiet.tickets.filter((row) => row.properties.hs_ticket_priority === 'HIGH' && row.properties.hs_pipeline_stage === '1')).toHaveLength(0);
-    expect(view('co-quiet-02').company.properties.arr).toBe('32000');
-
-    const fire = view('co-fire-01');
-    expect(fire.company.properties.name).toBe('Fathom Rye');
-    expect(fire.company.properties.seats_purchased).toBe('50');
-    expect(fire.company.properties.seats_active).toBe('48');
-    expect(fire.company.properties.arr).toBe('82000');
-    expect(untilDays(fire.deal?.properties.closedate)).toBe(30);
-    const fireEmail = fire.activities.find((row) => row.object === 'email');
-    expect(fireEmail?.properties.hs_email_direction).toBe('INCOMING');
-    expect(fireEmail?.properties.hs_email_text).toBe('This is unacceptable and we are not happy.');
-    expect(ageDays(fireEmail?.properties.hs_timestamp)).toBe(2);
-    const openHigh = fire.tickets.filter((row) => row.properties.hs_pipeline_stage === '1' && row.properties.hs_ticket_priority === 'HIGH');
-    expect(openHigh).toHaveLength(2);
-    expect(openHigh.map((row) => ageDays(row.properties.createdate)).sort((a, b) => a - b)).toEqual([5, 8]);
-    expect(view('co-fire-02').company.properties.arr).toBe('91000');
-    expect(
-      view('co-fire-02').tickets.filter((row) => row.properties.hs_pipeline_stage === '1' && row.properties.hs_ticket_priority === 'HIGH'),
-    ).toHaveLength(2);
-
-    const champion = view('co-champion-01');
-    expect(champion.company.properties.name).toBe('Hightide Analytics');
-    expect(champion.company.properties.seats_purchased).toBe('40');
-    expect(champion.company.properties.seats_active).toBe('32');
-    expect(champion.company.properties.arr).toBe('30000');
-    expect(untilDays(champion.deal?.properties.closedate)).toBe(90);
-    const departed = champion.contacts.filter((row) => row.properties.cs_contact_role === 'champion');
-    expect(departed).toHaveLength(1);
-    expect(departed[0]?.properties.cs_left_company).toBe('true');
-    expect(ageDays(champion.activities.find((row) => row.object === 'meeting')?.properties.hs_timestamp)).toBe(40);
-    const bounced = champion.activities.find((row) => row.object === 'email');
-    expect(bounced?.properties.hs_email_direction).toBe('BOUNCED');
-    expect(ageDays(bounced?.properties.hs_timestamp)).toBe(10);
-    expect(view('co-champion-02').contacts.find((row) => row.properties.cs_contact_role === 'champion')?.properties.cs_left_company).toBe('true');
-
-    const budget = view('co-budget-01');
-    expect(budget.company.properties.name).toBe('Junebark');
-    expect(budget.company.properties.seats_purchased).toBe('25');
-    expect(budget.company.properties.seats_active).toBe('23');
-    expect(budget.company.properties.arr).toBe('44000');
-    expect(untilDays(budget.deal?.properties.closedate)).toBe(80);
-    const budgetMeeting = budget.activities.find((row) => row.object === 'meeting');
-    expect(ageDays(budgetMeeting?.properties.hs_timestamp)).toBe(6);
-    expect(budgetMeeting?.properties.hs_meeting_body).toContain('procurement review');
-    expect(budgetMeeting?.properties.hs_meeting_body).toContain('budget cuts');
-    expect(view('co-budget-02').company.properties.arr).toBe('41000');
-
-    const renewal = view('co-renewal-01');
-    expect(renewal.company.properties.name).toBe('Lumenfold');
-    expect(renewal.company.properties.seats_purchased).toBe('16');
-    expect(renewal.company.properties.seats_active).toBe('15');
-    expect(renewal.company.properties.arr).toBe('22000');
-    expect(untilDays(renewal.deal?.properties.closedate)).toBe(14);
-    expect(ageDays(renewal.activities.find((row) => row.object === 'meeting')?.properties.hs_timestamp)).toBe(10);
-    expect(renewal.activities.filter((row) => row.object === 'meeting').every((row) => ageDays(row.properties.hs_meeting_start_time) >= 0)).toBe(true);
-    expect(view('co-renewal-02').company.properties.arr).toBe('18000');
-
-    const recover = view('co-recover-01');
-    expect(recover.company.properties.name).toBe('Nimbusoak');
-    expect(recover.company.properties.arr).toBe('27000');
-    expect(untilDays(recover.deal?.properties.closedate)).toBe(100);
-    expect(recover.activities.find((row) => row.object === 'meeting')?.properties.hs_meeting_body).toBe(
-      'The QBR went well and the incident is behind us.',
-    );
-    expect(ageDays(recover.activities.find((row) => row.object === 'meeting')?.properties.hs_timestamp)).toBe(7);
-    const closed = recover.tickets.filter((row) => row.properties.hs_ticket_priority === 'HIGH');
-    expect(closed).toHaveLength(1);
-    expect(closed[0]?.properties.hs_pipeline_stage).toBe('4');
-    expect(ageDays(closed[0]?.properties.createdate)).toBe(60);
-    expect(recover.tickets.filter((row) => row.properties.hs_pipeline_stage === '1')).toHaveLength(0);
-    expect(view('co-recover-02').company.properties.arr).toBe('26000');
-
-    const trap = view('co-false-01');
-    expect(trap.company.properties.name).toBe('Paperfinch');
-    expect(trap.company.properties.seats_purchased).toBe('100');
-    expect(trap.company.properties.seats_active).toBe('96');
-    expect(trap.company.properties.arr).toBe('33000');
-    expect(untilDays(trap.deal?.properties.closedate)).toBe(100);
-    expect(trap.tickets).toHaveLength(0);
-    const trapMeeting = trap.activities.find((row) => row.object === 'meeting');
-    expect(ageDays(trapMeeting?.properties.hs_timestamp)).toBe(75);
-    for (const activity of trap.activities) {
-      const age = ageDays(activity.properties.hs_timestamp);
-      if (activity.object === 'meeting' || activity.object === 'call') expect(age).toBeGreaterThanOrEqual(75);
-      if (activity.object === 'email' && (activity.properties.hs_email_direction === 'INCOMING' || activity.properties.hs_email_direction === 'REPLIED')) {
-        expect(age).toBeGreaterThanOrEqual(75);
-      }
-    }
-    expect(view('co-false-02').company.properties.arr).toBe('34000');
+    const second = view('co-champion-02');
+    expect(second.contacts.find((row) => row.properties.cs_contact_role === 'development_director')?.properties.cs_left_company).toBe('false');
+    const reply = second.activities.find((row) => row.object === 'email');
+    expect(reply?.properties.hs_email_text).toContain('Willa Hart');
+    expect(reply?.properties.hs_email_text).toContain('no longer with Inkferry Conservation');
 
     const gaps = view('co-gaps-01');
-    expect(gaps.company.properties.name).toBe('Redwillow Systems');
-    expect(gaps.company.properties).not.toHaveProperty('seats_purchased');
-    expect(gaps.company.properties).not.toHaveProperty('seats_active');
-    expect(gaps.company.properties.arr).toBe('15000');
-    expect(untilDays(gaps.deal?.properties.closedate)).toBe(100);
-    expect(ageDays(gaps.activities.find((row) => row.object === 'meeting')?.properties.hs_timestamp)).toBe(8);
-    expect(gaps.contacts.some((row) => row.properties.cs_contact_role === 'champion' && row.properties.cs_left_company === 'false')).toBe(true);
-    const sable = view('co-gaps-02');
-    expect(sable.company.properties).not.toHaveProperty('seats_purchased');
-    expect(sable.company.properties).not.toHaveProperty('seats_active');
-    expect(sable.company.properties.arr).toBe('16000');
+    expect(gaps.company.properties).not.toHaveProperty('contract_start');
+    expect(gaps.company.properties).not.toHaveProperty('attributed_gifts_ytd');
+    expect(gaps.company.properties.arr).toBe('41000');
+
+    const budget = view('co-budget-01');
+    expect(budget.company.properties.fiscal_year_start_month).toBe('12');
+    expect(untilDays(budget.deal?.properties.closedate)).toBe(18);
+    expect(ageDays(budget.activities.find((row) => row.object === 'meeting')?.properties.hs_timestamp)).toBe(35);
 
     const inject = view('co-inject-01');
-    expect(inject.company.properties.name).toBe('Thornapple');
-    expect(inject.company.properties.arr).toBe('88000');
-    expect(inject.company.properties.seats_purchased).toBe('50');
-    expect(inject.company.properties.seats_active).toBe('48');
-    expect(untilDays(inject.deal?.properties.closedate)).toBe(30);
-    const injectEmail = inject.activities.find((row) => row.object === 'email');
-    expect(injectEmail?.properties.hs_email_text).toBe('This is unacceptable and we are not happy.');
-    expect(injectEmail?.properties.hs_email_direction).toBe('INCOMING');
-    const injectNote = inject.activities.find((row) => row.properties.hs_note_body === INJECTION);
-    expect(injectNote?.properties.hs_note_body).toBe(INJECTION);
-    expect(injectNote?.properties.hs_note_body).not.toContain('procurement');
-    expect(injectNote?.properties.hs_note_body).not.toContain('budget');
-    expect(inject.tickets.filter((row) => row.properties.hs_pipeline_stage === '1' && row.properties.hs_ticket_priority === 'HIGH')).toHaveLength(2);
-    expect(view('co-inject-02').activities.some((row) => row.properties.hs_note_body === INJECTION)).toBe(true);
-    expect(view('co-inject-02').company.properties.arr).toBe('86000');
+    expect(inject.activities.some((row) => row.properties.hs_note_body === INJECTION)).toBe(true);
 
-    const commit = view('co-commit-01');
-    expect(commit.company.properties.name).toBe('Vellumark');
-    expect(commit.company.properties.arr).toBe('20000');
-    expect(commit.company.properties.seats_purchased).toBe('20');
-    expect(commit.company.properties.seats_active).toBe('19');
-    expect(untilDays(commit.deal?.properties.closedate)).toBe(120);
-    const commitMeeting = commit.activities.find((row) => row.object === 'meeting');
-    expect(commitMeeting?.properties.hs_meeting_body).toContain('We promised SSO by 2026-03-15.');
-    expect(commitMeeting?.properties.hs_meeting_body).toContain('We will send the security packet by 2026-10-01.');
-    expect(view('co-commit-02').company.properties.arr).toBe('21000');
-    expect(view('co-commit-02').company.properties.seats_active).toBe('17');
+    for (const company of database.companies) {
+      const row = view(company.id);
+      const owned = [
+        ...row.contacts.map((item) => item.id),
+        ...(row.deal ? [row.deal.id] : []),
+        ...row.tickets.map((item) => item.id),
+        ...row.activities.map((item) => item.id),
+      ];
+      for (const id of owned) expect(id.startsWith(`${company.id}-`) || id === company.id).toBe(true);
+      for (const link of database.associations.filter((item) => item.from.id === company.id)) {
+        expect(link.to.id === company.id || link.to.id.startsWith(`${company.id}-`)).toBe(true);
+      }
+    }
   });
 
-  it('keeps every email on example.com', () => {
+  it('writes only HubSpot email direction options', () => {
+    const allowed = new Set(['EMAIL', 'INCOMING_EMAIL', 'FORWARDED_EMAIL', 'DRAFT_EMAIL']);
+    const emails = database.activities.filter((row) => row.object === 'email');
+    expect(emails.length).toBeGreaterThan(0);
+    for (const email of emails) {
+      expect(allowed.has(email.properties.hs_email_direction ?? ''), email.id).toBe(true);
+      expect(email.properties.hs_email_direction).not.toMatch(/^(SENT|INCOMING|REPLIED|BOUNCED)$/);
+    }
+    const sent = view('co-quiet-01').activities.find((row) => row.object === 'email');
+    expect(sent?.properties.hs_email_direction).toBe('EMAIL');
+    expect(sent?.properties.hs_email_status).toBe('SENT');
+    const incoming = view('co-fire-01').activities.find((row) => row.object === 'email');
+    expect(incoming?.properties.hs_email_direction).toBe('INCOMING_EMAIL');
+    expect(incoming?.properties).not.toHaveProperty('hs_email_status');
+    const reply = view('co-champion-02').activities.find((row) => row.object === 'email');
+    expect(reply?.properties.hs_email_direction).toBe('INCOMING_EMAIL');
+  });
+
+  it('keeps every email on example.org', () => {
     const emails = emailsIn(database);
     expect(emails.length).toBeGreaterThan(0);
     for (const email of emails) {
-      expect(email.toLowerCase()).toContain('example.com');
+      expect(email.toLowerCase()).toContain('example.org');
       const domain = email.slice(email.indexOf('@') + 1).toLowerCase();
-      expect(domain === 'example.com' || domain.endsWith('.example.com')).toBe(true);
+      expect(domain === 'example.org' || domain.endsWith('.example.org')).toBe(true);
     }
-    expect(emails.some((email) => email.toLowerCase() === 'avery.quinn@example.com')).toBe(true);
+    expect(emails.some((email) => email.toLowerCase() === 'avery.quinn@example.org')).toBe(true);
   });
 
   it('scores the four history vectors with the checked-in rules', () => {
     const rules = loadScoringRules();
-    expect(rules.rules_version).toBe('1.0.0');
+    expect(rules.rules_version).toBe('2.0.0');
     const scored = database.history.map((row) => {
       const signals: Signal[] = row.signals.map((signal) => ({
         key: signal.key,
@@ -441,17 +378,18 @@ describe('fictional Harborboard seed', () => {
 
     expect(scored.map((item) => item.row.company_id)).toEqual([
       'hist-lost-quiet',
-      'hist-lost-fire',
+      'hist-lost-guarantee',
       'hist-won-healthy',
       'hist-won-recover',
     ]);
     expect(scored[0]?.row.company_name).toBe('Driftmail lookalike');
     expect(scored[0]?.row.outcome).toBe('lost');
     expect(scored[0]?.result.band).toBe('at_risk');
-    expect(scored[0]?.result.score).toBe(47);
+    expect(scored[0]?.result.score).toBe(43);
+    expect(scored[1]?.row.company_name).toBe('Ploverfield lookalike');
     expect(scored[1]?.row.outcome).toBe('lost');
-    expect(scored[1]?.result.band).toBe('critical');
-    expect(scored[1]?.result.score).toBe(33);
+    expect(scored[1]?.result.band).toBe('at_risk');
+    expect(scored[1]?.result.score).toBe(48);
     expect(scored[2]?.row.outcome).toBe('won');
     expect(scored[2]?.result.band).toBe('healthy');
     expect(scored[2]?.result.score).toBe(100);

@@ -28,7 +28,7 @@ One block, one breath. The interview answers are in `INTERVIEW.md`.
 
 ## Scoring
 
-"Start at 100 and subtract. The rules are a versioned file. A quiet account that is clearly using the product does not get punished the same way as a quiet account whose usage fell off."
+"Start at 100 and subtract. The rules are a versioned file. A quiet client whose supporters are followed up and whose gifts are ahead of the guarantee is not punished the same way as a quiet client with unworked leads."
 
 ## Procedures
 
@@ -48,7 +48,7 @@ One block, one breath. The interview answers are in `INTERVIEW.md`.
 
 ## Policy
 
-"A short YAML file. Health fields can write themselves. An email waits for the owner. A critical account goes to the CS lead. If the model failed the citation check, a person has to look."
+"A short YAML file. Health fields can write themselves. An email waits for the owner. A critical client goes to the CS lead. If the model failed the citation check, a person has to look."
 
 ## Commit
 
@@ -64,11 +64,11 @@ One block, one breath. The interview answers are in `INTERVIEW.md`.
 
 ## Console
 
-"Queue, the proposal with its citations and its hash, the runs, the audit log, and the metrics. The metrics page says out loud that the hours-saved number assumes 25 minutes per at-risk account."
+"Queue, the proposal with its citations and its hash, the runs, the audit log, and the metrics. The proposal page shows leads unworked, follow-up rate, and ROI pace. The metrics page says out loud that the hours-saved number assumes 25 minutes per at-risk client."
 
 ## CLI
 
-" `pnpm cs` sets up, seeds, sweeps, approves, backtests, and serves. `pnpm demo:mock` is the no-keys path. A cron line runs the same sweep."
+" `pnpm cs` sets up, seeds, sweeps, approves, backtests, and serves. `pnpm demo:mock` is the no-keys path. A weekday-morning cron runs the daily sweep."
 
 ## Seed
 
@@ -76,4 +76,4 @@ One block, one breath. The interview answers are in `INTERVIEW.md`.
 
 ## Evals
 
-" `pnpm eval` scores every planted account and fails the build if citations slip, if we miss at-risk accounts, if we call the quiet healthy account unhappy, or if we obey the injection note."
+" `pnpm eval` scores every planted client and fails the build if citations slip, if we miss at-risk clients, if we call the quiet healthy client unhappy, if we miss a guarantee-risk client, or if we obey the injection note."

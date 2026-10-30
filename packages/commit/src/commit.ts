@@ -7,6 +7,7 @@ import {
   type HubSpotPort,
   type LedgerPort,
   type ProposedAction,
+  type RecordRef,
   type RunMode,
 } from '@cs-agent/core';
 import type { PortalConfig } from '@cs-agent/config';
@@ -62,11 +63,24 @@ export async function commitAction(input: {
   const propertyHit =
     action.kind === 'set_properties' && (await companyHasMarker(hubspot, portal, companyId, marker));
   const paired = action.kind === 'draft_outreach' || action.kind === 'escalate';
-  const hasTask = markerRefs.some((ref) => ref.object === 'task');
-  const hasNote = markerRefs.some((ref) => ref.object === 'note');
+  let taskRefs = markerRefs.filter((ref) => ref.object === 'task');
+  const noteRefs = markerRefs.filter((ref) => ref.object === 'note');
+  if (action.kind === 'draft_outreach' && taskRefs.length === 0) {
+    const matched = await findDraftEmailTask(
+      hubspot,
+      portal,
+      companyId,
+      payloadText(action.payload, 'subject'),
+      payloadText(action.payload, 'body'),
+    );
+    if (matched) taskRefs = [matched];
+  }
+  const hasTask = taskRefs.length > 0;
+  const hasNote = noteRefs.length > 0;
+  const knownRefs = dedupeRefs([...markerRefs, ...taskRefs]);
 
   if ((!paired && (markerRefs.length > 0 || propertyHit)) || (paired && hasTask && hasNote)) {
-    const ids = markerRefs.map((ref) => ref.id);
+    const ids = knownRefs.map((ref) => ref.id);
     // outcome committed is what inserts the key. The caller still hears replayed.
     await rememberCommitted(ledger, action, state, actor, ids.length > 0 ? ids : [companyId]);
     return { outcome: 'replayed', detail: 'Marker already present.' };
@@ -96,7 +110,7 @@ export async function commitAction(input: {
     return { outcome: 'dry_run', detail };
   }
 
-  const priorIds = markerRefs.map((ref) => ref.id);
+  const priorIds = knownRefs.map((ref) => ref.id);
   const written: CrmRecord[] = [];
   try {
     for (const plan of pending) written.push(await plan.apply(hubspot));
@@ -198,6 +212,44 @@ async function companyHasMarker(
   const record = await hubspot.getRecord({ object: 'company', id: companyId }, [name]);
   const value = record?.properties[name] ?? '';
   return value.includes(marker);
+}
+
+/** An EMAIL task already written with this approved subject and body, even when it has no marker. */
+async function findDraftEmailTask(
+  hubspot: HubSpotPort,
+  portal: PortalConfig,
+  companyId: string,
+  subject: string,
+  body: string,
+): Promise<RecordRef | null> {
+  const tasks = await hubspot.listAssociations({ object: 'company', id: companyId }, 'task');
+  const subjectKey = portal.properties.task.subject;
+  const bodyKey = portal.properties.task.body;
+  const typeKey = portal.properties.task.type;
+  for (const task of tasks) {
+    const record = await hubspot.getRecord(task, [subjectKey, bodyKey, typeKey]);
+    if (!record) continue;
+    if ((record.properties[typeKey] ?? '') !== 'EMAIL') continue;
+    if (record.properties[subjectKey] === subject && record.properties[bodyKey] === body) return task;
+  }
+  return null;
+}
+
+function payloadText(payload: ProposedAction['payload'], key: string): string {
+  const value = payload[key];
+  return value == null ? '' : String(value);
+}
+
+function dedupeRefs(refs: RecordRef[]): RecordRef[] {
+  const seen = new Set<string>();
+  const unique: RecordRef[] = [];
+  for (const ref of refs) {
+    const key = `${ref.object}:${ref.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(ref);
+  }
+  return unique;
 }
 
 function commitRow(

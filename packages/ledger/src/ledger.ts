@@ -18,6 +18,7 @@ import {
   type RecordRef,
   type RunMode,
   type RunRecord,
+  type WebhookDedupeClaim,
 } from '@cs-agent/core';
 import { openSql, type Sql } from './sql.js';
 
@@ -348,13 +349,54 @@ export function createLedgerPort(sql: Sql): LedgerPort {
     },
 
     async runCost(runId) {
-      const rows = await sql.query<{ cost: number | string | null }>(
-        'SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM llm_calls WHERE run_id = $1',
+      const rows = await sql.query<{ cost: number | string | null; calls: number | string; priced: number | string }>(
+        `SELECT SUM(cost_usd) AS cost, COUNT(*) AS calls, COUNT(cost_usd) AS priced
+         FROM llm_calls WHERE run_id = $1`,
         [runId],
       );
-      return Number(rows[0]?.cost ?? 0);
+      const row = rows[0];
+      const calls = Number(row?.calls ?? 0);
+      const priced = Number(row?.priced ?? 0);
+      if (calls === 0) return 0;
+      if (priced !== calls) return null;
+      return Number(row?.cost ?? 0);
+    },
+
+    async claimWebhookDedupe(input) {
+      return claimDedupeKey(sql, input);
     },
   };
+}
+
+async function claimDedupeKey(sql: Sql, input: WebhookDedupeClaim): Promise<boolean> {
+  return sql.transaction(async (tx) => {
+    const inserted = await tx.query(
+      `INSERT INTO webhook_dedupe (key, kind, account_id, run_id, seen_at)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (key) DO NOTHING
+       RETURNING key`,
+      [input.key, input.kind, input.accountId, input.runId, input.seenAt],
+    );
+    if (inserted.length > 0) return true;
+    if (input.windowMs == null) return false;
+
+    const existing = await tx.query<{ seen_at: Date | string }>(
+      'SELECT seen_at FROM webhook_dedupe WHERE key = $1 FOR UPDATE',
+      [input.key],
+    );
+    const row = existing[0];
+    if (!row) return false;
+    const age = new Date(input.seenAt).getTime() - new Date(iso(row.seen_at)).getTime();
+    if (age < input.windowMs) return false;
+    const updated = await tx.query(
+      `UPDATE webhook_dedupe
+         SET kind = $2, account_id = $3, run_id = $4, seen_at = $5
+       WHERE key = $1 AND seen_at = $6
+       RETURNING key`,
+      [input.key, input.kind, input.accountId, input.runId, input.seenAt, row.seen_at],
+    );
+    return updated.length > 0;
+  });
 }
 
 async function insertAudit(sql: Sql, entry: Omit<AuditEntry, 'id'> & { id?: string }): Promise<void> {
@@ -424,7 +466,7 @@ interface RunRow extends Record<string, unknown> {
   accounts_considered: number;
   proposals_created: number;
   commits: number;
-  cost_usd: number | string;
+  cost_usd: number | string | null;
   error: string | null;
 }
 
@@ -463,7 +505,7 @@ function runFromRow(row: RunRow): RunRecord {
     accounts_considered: Number(row.accounts_considered),
     proposals_created: Number(row.proposals_created),
     commits: Number(row.commits),
-    cost_usd: Number(row.cost_usd),
+    cost_usd: row.cost_usd == null ? null : Number(row.cost_usd),
     error: row.error,
   };
 }

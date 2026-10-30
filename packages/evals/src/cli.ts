@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { repoRoot } from '@cs-agent/config';
+import { loadDotEnv, repoRoot } from '@cs-agent/config';
 import { frozenClock } from '@cs-agent/core';
 import { renderEvalReport, writeEvalReport } from './report.js';
 import { EVAL_CLOCK, runEval } from './run.js';
@@ -87,6 +87,7 @@ function isMain(): boolean {
 }
 
 if (isMain()) {
+  loadDotEnv();
   main().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     console.error(message);

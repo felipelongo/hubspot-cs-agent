@@ -1,12 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { OUTPUT_SCHEMAS, type LlmGenerateInput, type LlmGenerateResult, type LlmPort, type LlmToolCall, type OutputSchemaName } from '@cs-agent/core';
+import { loadModelPrices } from '@cs-agent/config';
+import { OUTPUT_SCHEMAS, type LlmGenerateInput, type LlmGenerateResult, type LlmPort, type LlmToolCall, type LlmUsage, type OutputSchemaName } from '@cs-agent/core';
+import { estimateModelCost, type ModelPriceTable } from './cost.js';
 import { createMockLlm } from './mock.js';
-
-/**
- * cost_usd is 0 until a price table is configured.
- * Token counts still come from the SDK usage block when it is present.
- */
-const COST_USD = 0;
 
 const SHAPES: Record<OutputSchemaName, string> = {
   RiskAssessment:
@@ -75,12 +71,20 @@ export interface ModelBlock {
   id?: string;
   name?: string;
   input?: unknown;
+  thinking?: string;
+  signature?: string;
+  data?: string;
 }
 
 export interface ModelResponse {
   content: ModelBlock[];
   stop_reason: string | null;
-  usage?: { input_tokens?: number; output_tokens?: number };
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number | null;
+    cache_creation_input_tokens?: number | null;
+  };
   model?: string;
 }
 
@@ -102,17 +106,13 @@ export function createLlm(env: NodeJS.ProcessEnv = process.env): LlmPort {
       stream: false,
     });
     return {
-      content: message.content.map((block) => ({
-        type: block.type,
-        text: block.type === 'text' ? block.text : undefined,
-        id: block.type === 'tool_use' ? block.id : undefined,
-        name: block.type === 'tool_use' ? block.name : undefined,
-        input: block.type === 'tool_use' ? block.input : undefined,
-      })),
+      content: message.content.map(toModelBlock),
       stop_reason: message.stop_reason,
       usage: {
         input_tokens: message.usage?.input_tokens,
         output_tokens: message.usage?.output_tokens,
+        cache_read_input_tokens: message.usage?.cache_read_input_tokens,
+        cache_creation_input_tokens: message.usage?.cache_creation_input_tokens,
       },
       model: message.model,
     };
@@ -121,6 +121,7 @@ export function createLlm(env: NodeJS.ProcessEnv = process.env): LlmPort {
 
 /** Real client with the HTTP call injected, so tests never reach Anthropic. */
 export function createAnthropicLlm(createMessage: CreateMessage, env: NodeJS.ProcessEnv = process.env): LlmPort {
+  const prices = loadModelPrices();
   return {
     async generate(input: LlmGenerateInput): Promise<LlmGenerateResult> {
       const model = modelForTier(input.tier, env);
@@ -137,6 +138,10 @@ export function createAnthropicLlm(createMessage: CreateMessage, env: NodeJS.Pro
       const toolCalls: LlmToolCall[] = [];
       let inputTokens = 0;
       let outputTokens = 0;
+      let cacheReadTokens = 0;
+      let cacheWriteTokens = 0;
+      let costUsd = 0;
+      let unpriced = false;
       let modelUsed = model;
       let lastError = '';
 
@@ -149,6 +154,7 @@ export function createAnthropicLlm(createMessage: CreateMessage, env: NodeJS.Pro
         const turn = await runToolLoop({
           createMessage,
           model,
+          prices,
           system,
           messages: conversation,
           maxSteps,
@@ -156,6 +162,10 @@ export function createAnthropicLlm(createMessage: CreateMessage, env: NodeJS.Pro
         });
         inputTokens += turn.inputTokens;
         outputTokens += turn.outputTokens;
+        cacheReadTokens += turn.cacheReadTokens;
+        cacheWriteTokens += turn.cacheWriteTokens;
+        if (turn.cost_usd == null) unpriced = true;
+        else costUsd += turn.cost_usd;
         toolCalls.push(...turn.toolCalls);
         if (turn.model) modelUsed = turn.model;
         const parsed = readJson(turn.text);
@@ -165,10 +175,11 @@ export function createAnthropicLlm(createMessage: CreateMessage, env: NodeJS.Pro
         }
         const validated = schema.safeParse(parsed.value);
         if (validated.success) {
+          const usage = usageFrom(inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens);
           return {
             output: validated.data,
-            usage: { input_tokens: inputTokens, output_tokens: outputTokens },
-            cost_usd: COST_USD,
+            usage,
+            cost_usd: unpriced ? null : costUsd,
             model: modelUsed,
             latency_ms: Date.now() - started,
             tool_calls: toolCalls,
@@ -198,15 +209,29 @@ function jsonInstruction(schemaName: OutputSchemaName): string {
 async function runToolLoop(input: {
   createMessage: CreateMessage;
   model: string;
+  prices: ModelPriceTable;
   system: string;
   messages: { role: 'user' | 'assistant'; content: string | unknown[] }[];
   maxSteps: number;
   onTool?: LlmGenerateInput['on_tool'];
-}): Promise<{ text: string; inputTokens: number; outputTokens: number; model?: string; toolCalls: LlmToolCall[] }> {
+}): Promise<{
+  text: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  cost_usd: number | null;
+  model?: string;
+  toolCalls: LlmToolCall[];
+}> {
   const messages = [...input.messages];
   const toolCalls: LlmToolCall[] = [];
   let inputTokens = 0;
   let outputTokens = 0;
+  let cacheReadTokens = 0;
+  let cacheWriteTokens = 0;
+  let costUsd = 0;
+  let unpriced = false;
   let model: string | undefined;
   let text = '';
   let steps = 0;
@@ -220,8 +245,21 @@ async function runToolLoop(input: {
       messages,
       tools: READ_TOOLS,
     });
-    inputTokens += response.usage?.input_tokens ?? 0;
-    outputTokens += response.usage?.output_tokens ?? 0;
+    const stepInput = response.usage?.input_tokens ?? 0;
+    const stepOutput = response.usage?.output_tokens ?? 0;
+    const stepCacheRead = response.usage?.cache_read_input_tokens ?? 0;
+    const stepCacheWrite = response.usage?.cache_creation_input_tokens ?? 0;
+    inputTokens += stepInput;
+    outputTokens += stepOutput;
+    cacheReadTokens += stepCacheRead;
+    cacheWriteTokens += stepCacheWrite;
+    const stepCost = estimateModelCost(
+      response.model ?? input.model,
+      usageFrom(stepInput, stepOutput, stepCacheRead, stepCacheWrite),
+      input.prices,
+    );
+    if (stepCost.cost_usd == null) unpriced = true;
+    else costUsd += stepCost.cost_usd;
     if (response.model) model = response.model;
     text = response.content
       .filter((block) => block.type === 'text' && block.text)
@@ -229,7 +267,16 @@ async function runToolLoop(input: {
       .join('\n');
     const toolUses = response.content.filter((block) => block.type === 'tool_use' && block.name && block.id);
     if (response.stop_reason !== 'tool_use' || toolUses.length === 0) {
-      return { text, inputTokens, outputTokens, model, toolCalls };
+      return {
+        text,
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
+        cost_usd: unpriced ? null : costUsd,
+        model,
+        toolCalls,
+      };
     }
     const results = [];
     for (const block of toolUses) {
@@ -243,11 +290,61 @@ async function runToolLoop(input: {
       });
     }
     if (steps >= input.maxSteps) break;
-    messages.push({ role: 'assistant', content: response.content });
+    messages.push({ role: 'assistant', content: response.content.map(echoBlock) });
     messages.push({ role: 'user', content: results });
   }
 
-  return { text, inputTokens, outputTokens, model, toolCalls };
+  return {
+    text,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    cost_usd: unpriced ? null : costUsd,
+    model,
+    toolCalls,
+  };
+}
+
+function usageFrom(inputTokens: number, outputTokens: number, cacheReadTokens: number, cacheWriteTokens: number): LlmUsage {
+  const usage: LlmUsage = { input_tokens: inputTokens, output_tokens: outputTokens };
+  if (cacheReadTokens > 0) usage.cache_read_input_tokens = cacheReadTokens;
+  if (cacheWriteTokens > 0) usage.cache_creation_input_tokens = cacheWriteTokens;
+  return usage;
+}
+
+function toModelBlock(block: Anthropic.ContentBlock): ModelBlock {
+  switch (block.type) {
+    case 'thinking':
+      return { type: 'thinking', thinking: block.thinking, signature: block.signature };
+    case 'redacted_thinking':
+      return { type: 'redacted_thinking', data: block.data };
+    case 'tool_use':
+      return { type: 'tool_use', id: block.id, name: block.name, input: block.input };
+    case 'text':
+      return { type: 'text', text: block.text };
+  }
+}
+
+function echoBlock(block: ModelBlock): Record<string, unknown> {
+  if (block.type === 'thinking') return withoutUndefined({ type: 'thinking', thinking: block.thinking, signature: block.signature });
+  if (block.type === 'redacted_thinking') return withoutUndefined({ type: 'redacted_thinking', data: block.data });
+  if (block.type === 'tool_use') return withoutUndefined({ type: 'tool_use', id: block.id, name: block.name, input: block.input });
+  if (block.type === 'text') return withoutUndefined({ type: 'text', text: block.text });
+  return withoutUndefined({
+    type: block.type,
+    text: block.text,
+    id: block.id,
+    name: block.name,
+    input: block.input,
+    thinking: block.thinking,
+    signature: block.signature,
+    data: block.data,
+  });
+}
+
+function withoutUndefined(block: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(block).filter(([, value]) => value !== undefined));
 }
 
 function readJson(text: string): { ok: true; value: unknown } | { ok: false; error: string } {

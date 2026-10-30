@@ -117,6 +117,7 @@ function policyContext(proposal: ProposedAction, payload: ActionPayload): Policy
     band: readBand(payload) ?? readBand(proposal.payload) ?? bandFromReasons(proposal.reasons) ?? 'watch',
     arr: readArr(payload) ?? readArr(proposal.payload),
     needs_review: proposal.policy_decision.needs_review,
+    signals: {},
   };
 }
 
