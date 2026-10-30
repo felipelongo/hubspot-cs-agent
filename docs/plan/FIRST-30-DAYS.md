@@ -52,18 +52,20 @@ Shadow mode is the default until the CS lead has seen a week of proposals.
 
 - A written yes for which actions may auto-commit. The default in `config/policy.yaml` is the starting point: health fields, owner tasks, and timeline notes
 - The owner of each account, or confirmation that `seed_csm` / HubSpot owner is the assignee
-- A daily time for the sweep
+- A weekday morning for the daily sweep
 
 **What ships**
 
 - Live mode for those three action kinds
 - Outreach drafts and deal-stage changes still wait for approval
 - Critical clients, clients under half the guarantee pace, and at-risk clients renewing within 60 days escalate to the CS lead
-- A cron entry or Vercel Cron for `pnpm cs sweep renewal-risk-sweep --mode live`
+- A cron entry or Vercel Cron for the daily sweep: `0 7 * * 1-5` in `America/New_York`, `pnpm cs sweep renewal-risk-sweep --mode live`
 
 **Success**
 
-- A re-run the same week creates no second task, note, or property change
+- A second run the same day, or tomorrow's sweep with the same band, creates no second task or note
+- A worse band the same week creates one new owner task and one new timeline note that day
+- Health properties update on each run; unchanged values are a no-op
 - The lead can reject a draft, and the rejection is in the audit log
 - An edited draft does not go out on the old approval
 

@@ -31,7 +31,7 @@ flowchart LR
 
 The model sits inside the LLM port. Its tools are `hubspot_read_record`, `hubspot_list_associations`, and `propose_action`. It never receives `createRecord`, `updateRecord`, or `batchUpsert`. `propose_action` is pushed onto a list the runner never reads, so it is not where actions come from. The runner builds proposals from the validated procedure output. An outreach draft becomes `draft_outreach`. Overdue commitments become tasks. A QSR prep becomes a note. An escalation brief becomes `escalate`. The renewal assessment ignores `recommended_actions`. It always proposes a score write and a note, and it adds an owner task when the band is at risk or critical, or when renewal is within 21 days and no meeting is booked. Where the schema has reasons, citations are checked before they are stored. Policy then marks each proposal auto, approval, or escalate.
 
-## One sweep
+## Daily sweep
 
 ```mermaid
 sequenceDiagram
@@ -50,6 +50,7 @@ sequenceDiagram
   Sweep->>Commit: auto-approved only
   Commit->>HubSpot: write if hash and idempotency key agree
   Note over Sweep,Ledger: drafts and escalations wait in the console
+  Note over Sweep: daily sweep on weekday mornings; tomorrow's sweep writes nothing when the band is unchanged
 ```
 
 ## Action states
@@ -133,7 +134,7 @@ Each folder has a README. The lines below describe what that block does.
 - `draft_outreach` never sends email. After approval it becomes a HubSpot task of type EMAIL, plus an internal note. A person sends the email from HubSpot. The task text is the customer draft. The note holds the idempotency marker.
 - `update_deal_stage` exists and is policy-gated to approval. The renewal sweep does not move stages.
 - `mode: shadow` proposes and logs, and writes nothing. `dry_run` prints the request. `live` commits what policy allows.
-- Idempotency keys look like `renewal-risk:company:<id>:task:<iso-week>`. The ledger is the primary duplicate check. A marker `[cs-agent:<key>]` on internal notes, tasks, and properties is the backup if the database is lost. The customer email task for `draft_outreach` does not carry that marker. A retry recognizes it by the approved subject and body.
+- Idempotency keys for owner tasks and timeline notes look like `renewal-risk:company:<id>:task:2026-W44:at_risk`. The health band is part of the key, so an unchanged client gets at most one task and one note per week, and a worse band in that week gets a new task and note the same day. Health property keys include the score and the band (`renewal-risk:company:<id>:set_properties:2026-W44:72:watch`). A changed value is written. An unchanged value is a no-op. The ledger is the primary duplicate check. A marker `[cs-agent:<key>]` on internal notes, tasks, and properties uses that same key. The customer email task for `draft_outreach` does not carry that marker. A retry recognizes it by the approved subject and body.
 - An approval stores `action_hash`, the sha256 of the canonical JSON of `{kind, target, payload}`. An edit supersedes the old proposal. The new one needs its own approval. Commit refuses a hash mismatch.
 - Health points are subtracted in `config/scoring-rules.yaml` (`rules_version: 2.0.0`), starting at 100. The model writes the reasons. It does not pick the number.
 - Search is not used to confirm a write. Search lags. The ledger and the marker do that job.
@@ -151,9 +152,10 @@ Each folder has a README. The lines below describe what that block does.
 
 ## Schedule and webhook
 
-There is no scheduler in this repo. The cron block below is an example a deployer would install on a host with a persistent database:
+The renewal-risk sweep is a daily sweep on weekday mornings. There is no scheduler process in this repo. The cron block below is what a deployer installs on a host with a persistent database:
 
 ```cron
+# Daily sweep, weekday mornings. Tomorrow's sweep writes nothing when the band is unchanged.
 CRON_TZ=America/New_York
 0 7 * * 1-5 cd /path/to/cs-agent && pnpm cs sweep renewal-risk-sweep --mode live
 ```

@@ -68,7 +68,7 @@ One block, one breath. The interview answers are in `INTERVIEW.md`.
 
 ## CLI
 
-" `pnpm cs` sets up, seeds, sweeps, approves, backtests, and serves. `pnpm demo:mock` is the no-keys path. A cron line runs the same sweep."
+" `pnpm cs` sets up, seeds, sweeps, approves, backtests, and serves. `pnpm demo:mock` is the no-keys path. A weekday-morning cron runs the daily sweep."
 
 ## Seed
 

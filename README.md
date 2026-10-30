@@ -4,6 +4,8 @@ A Customer Success agent for Harborboard Donor Engagement, a fictional program s
 
 `pnpm i && pnpm demo:mock` runs the whole renewal sweep with no API keys. Low-risk updates are written to an in-memory HubSpot. Drafted emails wait in a console. A second sweep writes nothing new.
 
+The scheduled job is a daily sweep on weekday mornings (`0 7 * * 1-5`, `America/New_York`). An unchanged client gets at most one owner task and one timeline note per week. A health band that worsens in that week gets a new task and note the same day. Health properties update on every run; unchanged values are a no-op.
+
 ## Quickstart
 
 ```bash
