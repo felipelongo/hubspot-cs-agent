@@ -1,0 +1,46 @@
+{
+  "notes": [
+    {
+      "company_id": "co-commit-01",
+      "days_ago": 10,
+      "body": "We promised a security review by 2026-03-15.",
+      "commitment": { "text": "security review", "due_date": "2026-03-15" }
+    },
+    {
+      "company_id": "co-commit-01",
+      "days_ago": 9,
+      "body": "We will send the renewal deck by 2026-12-01.",
+      "commitment": { "text": "renewal deck", "due_date": "2026-12-01" }
+    },
+    {
+      "company_id": "co-commit-01",
+      "days_ago": 8,
+      "body": "We will share the QBR notes by 2026-10-30.",
+      "commitment": { "text": "QBR notes", "due_date": "2026-10-30" }
+    },
+    {
+      "company_id": "co-commit-01",
+      "days_ago": 12,
+      "body": "The kickoff slide was titled We promised the moon. That was a joke about scope, not a deliverable, and no date was set.",
+      "commitment": null
+    },
+    {
+      "company_id": "co-commit-02",
+      "days_ago": 11,
+      "body": "We promised SSO by 2026-10-01.",
+      "commitment": { "text": "SSO", "due_date": "2026-10-01" }
+    },
+    {
+      "company_id": "co-commit-02",
+      "days_ago": 15,
+      "body": "We will send the security packet by 2026-11-15.",
+      "commitment": { "text": "security packet", "due_date": "2026-11-15" }
+    },
+    {
+      "company_id": "co-commit-02",
+      "days_ago": 18,
+      "body": "Logged that the operators like the weekly report. No follow-up was promised.",
+      "commitment": null
+    }
+  ]
+}

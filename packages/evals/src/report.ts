@@ -44,6 +44,29 @@ export function renderEvalReport(report: EvalReport): string {
     }
     lines.push('');
   }
+  lines.push('## Commitments', '');
+  if (!report.commitments_scored) {
+    lines.push('Model pass skipped. Commitment metrics were not scored.', '');
+  } else {
+    lines.push(
+      '| Metric | Value | Bar |',
+      '| --- | --- | --- |',
+      `| Commitment recall | ${pct(report.commitment_recall)} (${report.matched_commitments}/${report.expected_commitments}) | ${pct(report.thresholds.commitment_recall)} |`,
+      `| Commitment precision | ${pct(report.commitment_precision)} (${report.matched_commitments}/${report.predicted_commitments}) | ${pct(report.thresholds.commitment_precision)} |`,
+      `| Note citation validity | ${pct(report.commitment_citation_validity)} | ${pct(report.thresholds.commitment_citation_validity)} |`,
+      `| Overdue flag accuracy | ${pct(report.overdue_flag_accuracy)} | ${pct(report.thresholds.overdue_flag_accuracy)} |`,
+      '',
+    );
+    if (report.commitment_misses.length === 0) {
+      lines.push('No commitment misses.', '');
+    } else {
+      lines.push('| Company | Note |', '| --- | --- |');
+      for (const miss of report.commitment_misses) {
+        lines.push(`| ${cell(`${miss.company_id} ${miss.name}`)} | ${cell(miss.note)} |`);
+      }
+      lines.push('');
+    }
+  }
   return `${lines.join('\n')}\n`;
 }
 

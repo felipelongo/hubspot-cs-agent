@@ -3,17 +3,27 @@ import { buildAccountBundle } from '@cs-agent/bundle';
 import { accountNeedsLead } from '@cs-agent/policy';
 import { scoreSignals } from '@cs-agent/scoring';
 import { computeSignals } from '@cs-agent/signals';
-import { collectBundleRefs, frozenClock, type Clock, type ExpectedAccount } from '@cs-agent/core';
+import {
+  CommitmentExtractSchema,
+  collectBundleRefs,
+  frozenClock,
+  type AccountBundle,
+  type Clock,
+  type ExpectedAccount,
+} from '@cs-agent/core';
 import { loadMockHubSpot, loadSeed } from './adapters.js';
 import {
   atRiskStats,
   citationValidity,
+  commitmentStats,
   injectionBandCorrect,
   passesThresholds,
   scoreCitationsOk,
   trapCorrect,
+  type CommitmentAccountInput,
+  type CommitmentPrediction,
 } from './metrics.js';
-import { prepareModel } from './model.js';
+import { prepareModel, type PreparedModel } from './model.js';
 import { loadThresholds } from './thresholds.js';
 import type { EvalMiss, EvalReport, EvalRow } from './types.js';
 
@@ -39,6 +49,7 @@ export async function runEval(input?: { clock?: Clock; llm?: 'mock' | 'real' }):
   const misses: EvalMiss[] = [];
   const trapRows: { archetype: string; actual_band: string }[] = [];
   const injectionRows: { injection_probe: boolean; expected_band: string; actual_band: string; leak: boolean }[] = [];
+  const commitmentInputs: CommitmentAccountInput[] = [];
 
   for (const account of expected.accounts) {
     const bundle = await buildAccountBundle({
@@ -112,18 +123,54 @@ export async function runEval(input?: { clock?: Clock; llm?: 'mock' | 'real' }):
         note: missNote({ band: bandMiss, citation: citationMiss, leak: leakMiss }),
       });
     }
+
+    if (model) {
+      commitmentInputs.push({
+        company_id: account.company_id,
+        name: account.name,
+        note_ids: noteIds(bundle),
+        expected: account.expected_commitments,
+        predicted: await readCommitments(model, {
+          bundle,
+          signals,
+          score,
+          hubspot,
+          policy,
+          portal,
+          clock,
+          allowed,
+        }),
+      });
+    }
   }
 
   const stats = atRiskStats(rows);
   const citation_validity = citationValidity(rows);
   const false_positive_trap_correct = trapCorrect(trapRows);
   const injection_probe_correct = injectionBandCorrect(injectionRows) && injectionRows.every((row) => !row.leak);
+  const commitments = model
+    ? commitmentStats(commitmentInputs, clock.now().toISOString().slice(0, 10))
+    : {
+        commitment_recall: 1,
+        commitment_precision: 1,
+        commitment_citation_validity: 1,
+        overdue_flag_accuracy: 1,
+        expected_commitments: 0,
+        predicted_commitments: 0,
+        matched_commitments: 0,
+        misses: [],
+      };
   const passed = passesThresholds(
     {
       citation_validity,
       at_risk_recall: stats.at_risk_recall,
       false_positive_trap_correct,
       injection_probe_correct,
+      commitments_scored: model != null,
+      commitment_recall: commitments.commitment_recall,
+      commitment_precision: commitments.commitment_precision,
+      commitment_citation_validity: commitments.commitment_citation_validity,
+      overdue_flag_accuracy: commitments.overdue_flag_accuracy,
     },
     thresholds,
   );
@@ -146,7 +193,37 @@ export async function runEval(input?: { clock?: Clock; llm?: 'mock' | 'real' }):
     predicted_at_risk: stats.predicted_at_risk,
     true_positives: stats.true_positives,
     misses,
+    commitments_scored: model != null,
+    commitment_recall: commitments.commitment_recall,
+    commitment_precision: commitments.commitment_precision,
+    commitment_citation_validity: commitments.commitment_citation_validity,
+    overdue_flag_accuracy: commitments.overdue_flag_accuracy,
+    expected_commitments: commitments.expected_commitments,
+    predicted_commitments: commitments.predicted_commitments,
+    matched_commitments: commitments.matched_commitments,
+    commitment_misses: commitments.misses,
   };
+}
+
+async function readCommitments(
+  model: PreparedModel,
+  input: Parameters<PreparedModel['extractCommitments']>[0],
+): Promise<CommitmentPrediction[]> {
+  try {
+    const raw = await model.extractCommitments(input);
+    return CommitmentExtractSchema.parse(raw).commitments.map((item) => ({
+      text: item.text,
+      due_date: item.due_date,
+      overdue: item.overdue,
+      citations: item.citations,
+    }));
+  } catch {
+    return [{ text: 'unparsed', due_date: null, overdue: false, citations: ['not-a-note'] }];
+  }
+}
+
+function noteIds(bundle: AccountBundle): string[] {
+  return bundle.activities.filter((activity) => activity.kind === 'note').map((activity) => activity.ref.id);
 }
 
 function isInjection(account: ExpectedAccount): boolean {

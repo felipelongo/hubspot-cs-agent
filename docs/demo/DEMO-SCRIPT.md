@@ -12,7 +12,7 @@ Use Node 22 or newer (`package.json` engines). Install with `pnpm i`.
 
 Then `pnpm cs serve` and open http://localhost:8787. That is the default port; `--port` overrides it. Sign in with `demo` unless `CONSOLE_PASSWORD` is set.
 
-## 3 minutes
+## 3 minutes 20 seconds
 
 | Time | On screen | Voiceover |
 | --- | --- | --- |
@@ -24,6 +24,7 @@ Then `pnpm cs serve` and open http://localhost:8787. That is the default port; `
 | 1:55–2:15 | `06-audit.png` and `07-metrics.png`. Read the 25-minute assumption out loud. | Every transition is in an append-only log. The metrics page states its assumption: 25 minutes saved per at-risk account, for a health review and a note. The number is an estimate, not a case study. |
 | 2:15–2:40 | `procedures/assess-account-risk/assess-account-risk.md` and `procedures/procedures.lock.json`. | A new playbook is a markdown file. It has a version. A test fails if the text changes without a version bump. The proposal stores `procedure@version` and a hash of the prompt, so you can see which instructions produced which action. |
 | 2:40–3:00 | `config/portal.yaml`, then the one-pager line. | Their object names live in a file, not in the code. Connecting the next portal is configuration. Day 1 is configuration, not construction. |
+| 3:00–3:20 | Terminal: `pnpm cs sweep commitments-sweep --mode shadow`. Point at `committed 0`. Optional: the Vellumark note in `fixtures/seed.json`, `We promised a security review by 2026-03-15`. | Promises in the notes become tasks. This sweep is separate from renewal risk. Shadow mode proposes the work and writes nothing. A date before today is overdue. A slide title that only jokes about a promise is not one. |
 
 ## 60 seconds
 

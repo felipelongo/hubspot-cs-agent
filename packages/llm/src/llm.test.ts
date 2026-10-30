@@ -100,6 +100,48 @@ describe('MockLLM', () => {
     expect(undated.commitments.find((item) => item.due_date === '2026-12-01')?.overdue).toBe(false);
   });
 
+  it('reads dated promises from note text and skips a joke that only looks like one', async () => {
+    const result = await createMockLlm().generate({
+      messages: [
+        customerMessage({
+          as_of: '2026-10-30T12:00:00.000Z',
+          bundle: {
+            owner: { name: 'Avery Quinn' },
+            activities: [
+              { ref: { object: 'note', id: 'n-overdue' }, body: 'We promised a security review by 2026-03-15.' },
+              { ref: { object: 'note', id: 'n-today' }, body: 'We will share the QBR notes by 2026-10-30.' },
+              {
+                ref: { object: 'note', id: 'n-joke' },
+                body: 'The kickoff slide was titled We promised the moon. That was a joke about scope, not a deliverable, and no date was set.',
+              },
+              {
+                ref: { object: 'note', id: 'n-plain' },
+                body: 'Logged that the operators like the weekly report. No follow-up was promised.',
+              },
+            ],
+          },
+        }),
+      ],
+      schema_name: 'CommitmentExtract',
+      tier: 'fast',
+    });
+    const extracted = CommitmentExtractSchema.parse(result.output);
+    expect(extracted.commitments).toEqual([
+      expect.objectContaining({
+        text: 'a security review',
+        due_date: '2026-03-15',
+        overdue: true,
+        citations: ['hubspot:note:n-overdue'],
+      }),
+      expect.objectContaining({
+        text: 'share the QBR notes',
+        due_date: '2026-10-30',
+        overdue: false,
+        citations: ['hubspot:note:n-today'],
+      }),
+    ]);
+  });
+
   it('returns a five-line brief and an experimental QSR outline', async () => {
     const brief = EscalationBriefSchema.parse(
       (

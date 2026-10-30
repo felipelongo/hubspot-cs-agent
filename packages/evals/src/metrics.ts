@@ -7,6 +7,7 @@ import {
   type ScoreResult,
 } from '@cs-agent/core';
 import type { EvalThresholds } from './thresholds.js';
+import type { CommitmentMiss } from './types.js';
 
 /** At-risk class is the at_risk band or the critical band. */
 export function isAtRiskClass(band: string): boolean {
@@ -134,19 +135,170 @@ export function injectionBandCorrect(
   return rows.filter((row) => row.injection_probe).every((row) => row.actual_band === row.expected_band);
 }
 
+export interface CommitmentExpectation {
+  text: string;
+  due_date: string | null;
+  note_id: string;
+}
+
+export interface CommitmentPrediction {
+  text: string;
+  due_date: string | null;
+  overdue: boolean;
+  citations: string[];
+}
+
+export interface CommitmentAccountInput {
+  company_id: string;
+  name: string;
+  note_ids: string[];
+  expected: CommitmentExpectation[];
+  predicted: CommitmentPrediction[];
+}
+
+export interface CommitmentStats {
+  commitment_recall: number;
+  commitment_precision: number;
+  commitment_citation_validity: number;
+  overdue_flag_accuracy: number;
+  expected_commitments: number;
+  predicted_commitments: number;
+  matched_commitments: number;
+  misses: CommitmentMiss[];
+}
+
+/** A due date before as_of is overdue. The same day, a later day, and a missing date are not. */
+export function commitmentOverdue(due: string | null, asOfDay: string): boolean {
+  return due != null && /^\d{4}-\d{2}-\d{2}$/.test(due) && due < asOfDay;
+}
+
+/**
+ * Recall is matched promises divided by promises in the gold notes.
+ * Precision is matched promises divided by promises the model returned.
+ * A match needs the gold phrase, the same due date, and a citation of that note.
+ * Citation validity is the share of accounts whose citations are real note ids.
+ * Overdue accuracy is the share of predictions whose flag matches the due date against as_of.
+ * An empty side of a ratio is 1.
+ */
+export function commitmentStats(accounts: CommitmentAccountInput[], asOfDay: string): CommitmentStats {
+  let expected = 0;
+  let predicted = 0;
+  let matched = 0;
+  let overdueCorrect = 0;
+  let citationOkAccounts = 0;
+  const misses: CommitmentMiss[] = [];
+
+  for (const account of accounts) {
+    expected += account.expected.length;
+    predicted += account.predicted.length;
+    const used = new Set<number>();
+    const notes: string[] = [];
+    if (commitmentCitationsOk(account.predicted, new Set(account.note_ids))) citationOkAccounts += 1;
+    else notes.push('citation');
+
+    for (const item of account.expected) {
+      const index = account.predicted.findIndex((candidate, candidateIndex) => {
+        if (used.has(candidateIndex)) return false;
+        return (
+          promiseTextsMatch(candidate.text, item.text) &&
+          candidate.due_date === item.due_date &&
+          citesNote(candidate.citations, item.note_id)
+        );
+      });
+      if (index === -1) {
+        notes.push('missed');
+        continue;
+      }
+      used.add(index);
+      matched += 1;
+    }
+    if (account.predicted.some((_, index) => !used.has(index))) notes.push('extra');
+
+    for (const item of account.predicted) {
+      if (item.overdue === commitmentOverdue(item.due_date, asOfDay)) overdueCorrect += 1;
+      else notes.push('overdue');
+    }
+
+    if (notes.length > 0) {
+      misses.push({
+        company_id: account.company_id,
+        name: account.name,
+        note: [...new Set(notes)].join(', '),
+      });
+    }
+  }
+
+  return {
+    commitment_recall: expected === 0 ? 1 : matched / expected,
+    commitment_precision: predicted === 0 ? 1 : matched / predicted,
+    commitment_citation_validity: accounts.length === 0 ? 1 : citationOkAccounts / accounts.length,
+    overdue_flag_accuracy: predicted === 0 ? 1 : overdueCorrect / predicted,
+    expected_commitments: expected,
+    predicted_commitments: predicted,
+    matched_commitments: matched,
+    misses,
+  };
+}
+
+function promiseTextsMatch(predicted: string, expected: string): boolean {
+  const left = normalizePromise(predicted);
+  const right = normalizePromise(expected);
+  if (!left || !right) return false;
+  return left === right || left.includes(right);
+}
+
+function normalizePromise(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^we (promised|will)\s+/, '')
+    .replace(/\s+by\s+\d{4}-\d{2}-\d{2}\.?$/, '')
+    .replace(/\.+$/, '')
+    .trim();
+}
+
+function citesNote(citations: string[], noteId: string): boolean {
+  const wanted = `hubspot:note:${noteId}`;
+  return citations.some((citation) => citation === wanted);
+}
+
+function commitmentCitationsOk(predicted: CommitmentPrediction[], noteIds: Set<string>): boolean {
+  for (const item of predicted) {
+    if (item.citations.length === 0) return false;
+    for (const citation of item.citations) {
+      const parsed = parseRef(citation);
+      if (!parsed || parsed.object !== 'note' || !noteIds.has(parsed.id)) return false;
+    }
+  }
+  return true;
+}
+
 export function passesThresholds(
   metrics: {
     citation_validity: number;
     at_risk_recall: number;
     false_positive_trap_correct: boolean;
     injection_probe_correct: boolean;
+    commitments_scored: boolean;
+    commitment_recall: number;
+    commitment_precision: number;
+    commitment_citation_validity: number;
+    overdue_flag_accuracy: number;
   },
   thresholds: EvalThresholds,
 ): boolean {
-  return (
+  const risk =
     metrics.citation_validity + 1e-9 >= thresholds.citation_validity &&
     metrics.at_risk_recall + 1e-9 >= thresholds.at_risk_recall &&
     (thresholds.false_positive_trap_correct ? metrics.false_positive_trap_correct : true) &&
-    (thresholds.injection_probe_correct ? metrics.injection_probe_correct : true)
+    (thresholds.injection_probe_correct ? metrics.injection_probe_correct : true);
+  if (!metrics.commitments_scored) return risk;
+  return (
+    risk &&
+    metrics.commitment_recall + 1e-9 >= thresholds.commitment_recall &&
+    metrics.commitment_precision + 1e-9 >= thresholds.commitment_precision &&
+    metrics.commitment_citation_validity + 1e-9 >= thresholds.commitment_citation_validity &&
+    metrics.overdue_flag_accuracy + 1e-9 >= thresholds.overdue_flag_accuracy
   );
 }

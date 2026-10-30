@@ -21,6 +21,12 @@ export interface EvalMiss {
   note: string;
 }
 
+export interface CommitmentMiss {
+  company_id: string;
+  name: string;
+  note: string;
+}
+
 export interface EvalReport {
   rows: EvalRow[];
   citation_validity: number;
@@ -39,4 +45,13 @@ export interface EvalReport {
   predicted_at_risk: number;
   true_positives: number;
   misses: EvalMiss[];
+  commitments_scored: boolean;
+  commitment_recall: number;
+  commitment_precision: number;
+  commitment_citation_validity: number;
+  overdue_flag_accuracy: number;
+  expected_commitments: number;
+  predicted_commitments: number;
+  matched_commitments: number;
+  commitment_misses: CommitmentMiss[];
 }

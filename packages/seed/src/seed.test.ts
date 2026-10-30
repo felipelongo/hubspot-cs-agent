@@ -408,10 +408,34 @@ describe('fictional Harborboard seed', () => {
     expect(commit.company.properties.seats_active).toBe('19');
     expect(untilDays(commit.deal?.properties.closedate)).toBe(120);
     const commitMeeting = commit.activities.find((row) => row.object === 'meeting');
-    expect(commitMeeting?.properties.hs_meeting_body).toContain('We promised SSO by 2026-03-15.');
-    expect(commitMeeting?.properties.hs_meeting_body).toContain('We will send the security packet by 2026-10-01.');
-    expect(view('co-commit-02').company.properties.arr).toBe('21000');
-    expect(view('co-commit-02').company.properties.seats_active).toBe('17');
+    expect(commitMeeting?.properties.hs_meeting_body).toBe('Walked the roadmap with the operators. Usage looks steady.');
+    const commitNotes = commit.activities.filter((row) => row.object === 'note').map((row) => row.properties.hs_note_body);
+    expect(commitNotes[0]).toBe('We promised a security review by 2026-03-15.');
+    expect(commitNotes[1]).toBe('We will send the renewal deck by 2026-12-01.');
+    expect(commitNotes[2]).toBe('We will share the QBR notes by 2026-10-30.');
+    expect(commitNotes[3]).toContain('joke about scope');
+    expect(commitNotes[3]).not.toMatch(/we promised .+ by \d{4}-\d{2}-\d{2}/i);
+    const vellum = expected.accounts.find((row) => row.company_id === 'co-commit-01');
+    expect(vellum?.expected_commitments).toEqual([
+      { text: 'security review', due_date: '2026-03-15', note_id: 'co-commit-01-note-1' },
+      { text: 'renewal deck', due_date: '2026-12-01', note_id: 'co-commit-01-note-2' },
+      { text: 'QBR notes', due_date: '2026-10-30', note_id: 'co-commit-01-note-3' },
+    ]);
+    const wicker = view('co-commit-02');
+    expect(wicker.company.properties.arr).toBe('21000');
+    expect(wicker.company.properties.seats_active).toBe('17');
+    const wickerNotes = wicker.activities.filter((row) => row.object === 'note').map((row) => row.properties.hs_note_body);
+    expect(wickerNotes[0]).toBe('We promised SSO by 2026-10-01.');
+    expect(wickerNotes[1]).toBe('We will send the security packet by 2026-11-15.');
+    expect(wickerNotes[2]).toContain('No follow-up was promised.');
+    expect(expected.accounts.find((row) => row.company_id === 'co-commit-02')?.expected_commitments).toEqual([
+      { text: 'SSO', due_date: '2026-10-01', note_id: 'co-commit-02-note-1' },
+      { text: 'security packet', due_date: '2026-11-15', note_id: 'co-commit-02-note-2' },
+    ]);
+    for (const account of expected.accounts) {
+      if (account.archetype === 'open_commitments') continue;
+      expect(account.expected_commitments).toEqual([]);
+    }
   });
 
   it('keeps every email on example.com', () => {
