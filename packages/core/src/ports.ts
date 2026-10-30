@@ -229,6 +229,20 @@ export interface LedgerPort {
   getRun(id: string): Promise<RunRecord | null>;
   /** Sum of llm cost for a run. */
   runCost(runId: string): Promise<number>;
+  /**
+   * Record a webhook dedupe key. Returns true when this caller owns it.
+   * A null window never replaces an existing key. A window replaces it once the row is at least that old.
+   */
+  claimWebhookDedupe(input: WebhookDedupeClaim): Promise<boolean>;
+}
+
+export interface WebhookDedupeClaim {
+  key: string;
+  kind: 'event' | 'account';
+  accountId: string | null;
+  runId: string | null;
+  seenAt: string;
+  windowMs: number | null;
 }
 
 export interface ApprovalRequest {

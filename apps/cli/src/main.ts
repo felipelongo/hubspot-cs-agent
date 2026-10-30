@@ -185,8 +185,11 @@ async function serve(flags: Map<string, string | boolean>, env: NodeJS.ProcessEn
       hubspot: runtime.hubspot,
       portal: runtime.portal,
       policy: runtime.policy,
+      rules: runtime.rules,
+      llm: runtime.llm,
       clock: runtime.clock,
       password: env.CONSOLE_PASSWORD || 'demo',
+      env,
     },
     port,
   );
