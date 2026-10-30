@@ -6,4 +6,4 @@ The shared vocabulary: what an account, a signal, a score, a proposal, and an ac
 
 **One sentence.** "The shared vocabulary: what an account, a signal, a score, a proposal and an action are."
 
-**Public interface.** Types and zod schemas exported from `@cs-agent/core`: `RecordRef`, `AccountBundle`, `Signal`, `ScoreResult`, `ProposedAction`, `HubSpotReadPort`, `HubSpotWritePort`, `LlmPort`, `LedgerPort`, `ApprovalPort`, `Clock`. `actionHash` hashes `{kind, target, payload}`. `assertTransition` enforces the state table in `src/states.ts`.
+**Public interface.** Types and zod schemas exported from `@cs-agent/core`: `RecordRef`, `AccountBundle`, `Signal`, `ScoreResult`, `ProposedAction`, `HubSpotReadPort`, `HubSpotWritePort`, `LlmPort`, `LedgerPort`, `ApprovalPort`, `Clock`. `actionHash` hashes `{kind, target, payload}`. `assertTransition` enforces the state table in `src/states.ts`. `customerDraftViolations` flags internal scoring, the `[cs-agent:...]` marker, and "The account team" in a customer-facing subject or body.

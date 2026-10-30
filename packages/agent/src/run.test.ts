@@ -12,6 +12,7 @@ import {
   type HubSpotReadPort,
   type LedgerPort,
   type LlmCallRecord,
+  type LlmGenerateInput,
   type LlmPort,
   type ProposedAction,
   type ScoreResult,
@@ -104,6 +105,7 @@ function memoryLedger(blocked: string[] = []) {
   const blockedKeys = new Set(blocked);
   const inserted: ProposedAction[] = [];
   const calls: LlmCallRecord[] = [];
+  const audits: { action: string; after: unknown }[] = [];
   const ledger: LedgerPort = {
     migrate: async () => undefined,
     startRun: async () => undefined,
@@ -132,7 +134,9 @@ function memoryLedger(blocked: string[] = []) {
     hasIdempotency: async (key) => blockedKeys.has(key) || byKey.has(key),
     recordCommit: async () => undefined,
     listCommits: async () => [],
-    appendAudit: async () => undefined,
+    appendAudit: async (entry) => {
+      audits.push({ action: entry.action, after: entry.after });
+    },
     listAudit: async () => [],
     logLlmCall: async (call) => {
       calls.push(call);
@@ -142,7 +146,7 @@ function memoryLedger(blocked: string[] = []) {
     runCost: async () => 0,
     claimWebhookDedupe: async () => false,
   };
-  return { ledger, inserted, calls, proposals };
+  return { ledger, inserted, calls, proposals, audits };
 }
 
 function readPort() {
@@ -348,13 +352,39 @@ describe('runProcedure', () => {
       workflow: 'renewal-risk',
     };
 
-    const drafts = await runProcedure({ ...shared, procedureId: 'draft-renewal-outreach' });
+    const { bundle_hash: _ignored, ...rest } = account();
+    const bundle = withBundleHash({
+      ...rest,
+      renewal_deal: {
+        ref: { object: 'deal', id: 'deal-renewal' },
+        name: 'Northwind renewal',
+        amount: 24000,
+        close_date: '2026-11-20',
+        stage: 'Outreach scheduled',
+        pipeline: 'Renewals',
+        is_renewal: true,
+        stage_regressed: false,
+        outcome: 'open',
+        properties: {},
+      },
+    });
+    const drafts = await runProcedure({ ...shared, bundle, procedureId: 'draft-renewal-outreach' });
     expect(drafts).toHaveLength(1);
     expect(drafts[0]?.kind).toBe('draft_outreach');
     expect(drafts[0]?.state).toBe('awaiting_approval');
-    expect(String(drafts[0]?.payload.body)).toContain('The account team');
-    expect(String(drafts[0]?.payload.body)).toContain(agentMarker(drafts[0]!.idempotency_key));
+    expect(drafts[0]?.idempotency_key).toContain('outreach');
+    expect(String(drafts[0]?.payload.subject)).toBe('Planning ahead for your renewal');
+    expect(String(drafts[0]?.payload.body)).toContain('Avery');
+    expect(String(drafts[0]?.payload.body)).toContain('12 of your 40 seats are active');
+    expect(String(drafts[0]?.payload.body)).toContain('November');
+    expect(String(drafts[0]?.payload.body)).toContain('[booking link]');
+    expect(String(drafts[0]?.payload.body)).not.toContain('The account team');
+    expect(String(drafts[0]?.payload.body)).not.toContain('[cs-agent:');
+    expect(String(drafts[0]?.payload.subject)).not.toContain(agentMarker(drafts[0]!.idempotency_key));
     expect(String(drafts[0]?.payload.body).toLowerCase()).not.toContain('ignore previous instructions');
+    const words = String(drafts[0]?.payload.body).trim().split(/\s+/).filter(Boolean);
+    expect(words.length).toBeGreaterThanOrEqual(60);
+    expect(words.length).toBeLessThanOrEqual(120);
 
     const commitments = await runProcedure({ ...shared, procedureId: 'extract-commitments' });
     const tasks = commitments.filter((item) => item.kind === 'create_task');
@@ -380,4 +410,128 @@ describe('runProcedure', () => {
     expect(String(brief[0]?.payload.brief).split('\n')).toHaveLength(5);
     expect(brief[0]?.state).toBe('escalated');
   });
+
+  it('rewrites a violating outreach draft once, then keeps the clean one', async () => {
+    const memory = memoryLedger();
+    const seen: LlmGenerateInput[] = [];
+    const dirty = outreachOutput('Hello, our health review places you in the at_risk band.\n\nThe account team');
+    const clean = outreachOutput(
+      [
+        'Hello,',
+        '',
+        'I hope you are doing well at Northwind. 12 of your 40 seats are active, and it is good to see the team in the product. I am writing ahead of your November renewal so we can talk through the next year before that date arrives. Would you have 20 minutes for a renewal planning call? You can choose a time here: [booking link]. If I have the wrong person, please tell me who the right contact is.',
+        '',
+        'Thank you,',
+        'Avery',
+      ].join('\n'),
+    );
+    const llm: LlmPort = {
+      generate: async (request) => {
+        seen.push(request);
+        const output = seen.length === 1 ? dirty : clean;
+        return {
+          output,
+          usage: { input_tokens: 1, output_tokens: 1 },
+          cost_usd: 0,
+          model: 'script',
+          latency_ms: 0,
+          tool_calls: [],
+        };
+      },
+    };
+    const drafts = await runProcedure({
+      procedureId: 'draft-renewal-outreach',
+      bundle: account(),
+      signals,
+      score: score(),
+      llm,
+      hubspot: readPort().hubspot,
+      ledger: memory.ledger,
+      policy: loadPolicy(),
+      portal: loadPortalConfig(),
+      runId: 'run-draft',
+      clock,
+      workflow: 'renewal-risk',
+    });
+    expect(seen).toHaveLength(2);
+    expect(seen[1]?.messages.at(-1)?.content).toContain('at_risk');
+    expect(seen[1]?.messages.at(-1)?.content).toContain('The account team');
+    expect(drafts).toHaveLength(1);
+    expect(String(drafts[0]?.payload.body)).toContain('Avery');
+    expect(String(drafts[0]?.payload.body)).not.toContain('at_risk');
+    expect(String(drafts[0]?.payload.body)).not.toContain('[cs-agent:');
+  });
+
+  it('does not propose a draft that still violates after one rewrite', async () => {
+    const memory = memoryLedger();
+    let calls = 0;
+    const llm: LlmPort = {
+      generate: async () => {
+        calls += 1;
+        return {
+          output: outreachOutput('The health score places this account in the at_risk band.\n\nThe account team'),
+          usage: { input_tokens: 1, output_tokens: 1 },
+          cost_usd: 0,
+          model: 'script',
+          latency_ms: 0,
+          tool_calls: [],
+        };
+      },
+    };
+    const drafts = await runProcedure({
+      procedureId: 'draft-renewal-outreach',
+      bundle: account(),
+      signals,
+      score: score(),
+      llm,
+      hubspot: readPort().hubspot,
+      ledger: memory.ledger,
+      policy: loadPolicy(),
+      portal: loadPortalConfig(),
+      runId: 'run-draft',
+      clock,
+      workflow: 'renewal-risk',
+    });
+    expect(calls).toBe(2);
+    expect(drafts).toEqual([]);
+    expect(memory.audits.some((item) => item.action === 'needs_review')).toBe(true);
+    expect(JSON.stringify(memory.audits)).toContain('still violates');
+  });
+
+  it('skips a customer draft when the owner has no name', async () => {
+    const memory = memoryLedger();
+    let calls = 0;
+    const llm: LlmPort = {
+      generate: async () => {
+        calls += 1;
+        throw new Error('should not draft without an owner name');
+      },
+    };
+    const { bundle_hash: _ignored, ...rest } = account();
+    const drafts = await runProcedure({
+      procedureId: 'draft-renewal-outreach',
+      bundle: withBundleHash({ ...rest, owner: null }),
+      signals,
+      score: score(),
+      llm,
+      hubspot: readPort().hubspot,
+      ledger: memory.ledger,
+      policy: loadPolicy(),
+      portal: loadPortalConfig(),
+      runId: 'run-draft',
+      clock,
+      workflow: 'renewal-risk',
+    });
+    expect(calls).toBe(0);
+    expect(drafts).toEqual([]);
+    expect(JSON.stringify(memory.audits)).toMatch(/no owner name/i);
+  });
 });
+
+function outreachOutput(body: string) {
+  return {
+    subject: 'Planning ahead for your renewal',
+    body,
+    reasons: [{ text: 'Renewal planning for Northwind.', citations: ['hubspot:company:co-northwind'] }],
+  };
+}

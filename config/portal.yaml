@@ -141,7 +141,7 @@ models:
 # Rendered after every procedure. Per-account tone without forking the playbook.
 house_style: |
   Write like a calm customer success manager. Be specific, short, and kind.
-  Do not hype. Do not invent facts. Sign off as "The account team".
+  Do not hype. Do not invent facts.
 
 # Optional pin of procedure id → version. Empty means "use procedures.lock.json".
 procedure_pins: {}

@@ -40,6 +40,7 @@ export function renderEvalReport(report: EvalReport): string {
     `| Citation validity | ${pct(report.citation_validity)} | ${pct(report.thresholds.citation_validity)} |`,
     `| Injection probe | ${report.injection_probe_correct ? 'pass' : 'fail'} | ${report.thresholds.injection_probe_correct ? 'required' : 'not required'} |`,
     `| False-positive trap | ${report.false_positive_trap_correct ? 'pass' : 'fail'} | ${report.thresholds.false_positive_trap_correct ? 'required' : 'not required'} |`,
+    `| Customer draft clean | ${draftCleanCell(report)} | ${report.thresholds.customer_draft_clean ? 'required' : 'not required'} |`,
     `| Passed | ${report.passed ? 'yes' : 'no'} | |`,
     '',
     '## Misses',
@@ -88,6 +89,11 @@ export function renderEvalReport(report: EvalReport): string {
 export async function writeEvalReport(report: EvalReport, path: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, renderEvalReport(report), 'utf8');
+}
+
+function draftCleanCell(report: EvalReport): string {
+  if (report.model_pass_skipped) return 'not scored';
+  return report.customer_draft_clean ? 'pass' : 'fail';
 }
 
 function tokenLine(report: EvalReport): string {

@@ -29,9 +29,16 @@ interface Evidence {
 
 interface CustomerData {
   as_of?: string;
+  sender_first_name?: string;
   bundle?: {
-    company?: { name?: string; ref?: Evidence };
+    company?: {
+      name?: string;
+      ref?: Evidence;
+      seats_active?: number | null;
+      seats_purchased?: number | null;
+    };
     owner?: { name?: string } | null;
+    renewal_deal?: { close_date?: string | null } | null;
     activities?: { body?: string; ref?: Evidence }[];
   };
   score?: {
@@ -97,26 +104,69 @@ function riskAssessment(data: CustomerData, allowed: Set<string>): unknown {
 }
 
 function outreachDraft(data: CustomerData, allowed: Set<string>): unknown {
-  const name = data.bundle?.company?.name || 'this account';
-  const band = data.score?.band || 'watch';
+  const name = data.bundle?.company?.name || 'your team';
+  const first = senderFirstName(data);
   const company = companyRef(data);
+  const month = renewalMonth(data.bundle?.renewal_deal?.close_date);
+  const when = month
+    ? `I am writing ahead of your ${month} renewal so we can talk through the next year before that date arrives.`
+    : `I am writing ahead of your renewal so we can talk through the next year before the date arrives.`;
+  const fact = seatFact(data) ?? `It has been good to work with the team at ${name}.`;
+  const lines = [
+    'Hello,',
+    '',
+    `I hope you are doing well at ${name}. ${fact} ${when} Would you have 20 minutes for a renewal planning call? You can choose a time here: [booking link]. If I have the wrong person, please tell me who the right contact is.`,
+    '',
+    'Thank you,',
+  ];
+  if (first) lines.push(first);
   return {
-    subject: `${name} renewal (${band})`,
-    body: [
-      `Hello,`,
-      ``,
-      `I am checking in on ${name}. The health band on this account is ${band}.`,
-      `I would like to compare notes before the renewal.`,
-      ``,
-      `The account team`,
-    ].join('\n'),
+    subject: 'Planning ahead for your renewal',
+    body: lines.join('\n'),
     reasons: [
       {
-        text: `${name} is in the ${band} band.`,
+        text: `${name} has a renewal to plan.`,
         citations: citationsFrom(undefined, company, allowed),
       },
     ],
   };
+}
+
+function senderFirstName(data: CustomerData): string | null {
+  const explicit = data.sender_first_name?.trim().split(/\s+/)[0];
+  if (explicit) return explicit;
+  const owner = data.bundle?.owner?.name?.trim().split(/\s+/)[0];
+  return owner || null;
+}
+
+function seatFact(data: CustomerData): string | null {
+  const active = data.bundle?.company?.seats_active;
+  const purchased = data.bundle?.company?.seats_purchased;
+  if (typeof active !== 'number' || typeof purchased !== 'number') return null;
+  if (purchased <= 0 || active <= 0) return null;
+  return `${active} of your ${purchased} seats are active, and it is good to see the team in the product.`;
+}
+
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+function renewalMonth(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})/.exec(value);
+  if (!match?.[2]) return null;
+  return MONTHS[Number(match[2]) - 1] ?? null;
 }
 
 function commitmentExtract(data: CustomerData): unknown {

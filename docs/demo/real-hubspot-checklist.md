@@ -44,7 +44,7 @@ HubSpot often refuses to create users from the API. The seed maps every owner to
    Expect: a HubSpot task of type EMAIL assigned to the owner, and a note. No email is sent.
 
 8. **Re-run.** The same command as step 6.  
-   Expect: `replayed` on the commits, and no second task or note. Search the company timeline for `[cs-agent:`.
+   Expect: `replayed` on the commits, and no second task or note. The `[cs-agent:` marker is on the internal note, not the email task. Search the company timeline for `[cs-agent:`.
 
 9. **Reset when you are done practicing.** `pnpm cs seed:reset` archives records that have `seed_external_id`. It does not archive the rest of the portal.
 

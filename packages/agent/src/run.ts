@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import {
   OUTPUT_SCHEMAS,
   collectBundleRefs,
+  customerDraftViolations,
   isoWeekPeriod,
+  ownerFirstName,
   reasonsFromStrings,
   type AccountBundle,
   type ActionKind,
@@ -22,7 +24,7 @@ import {
 import type { PortalConfig } from '@cs-agent/config';
 import { decidePolicy } from '@cs-agent/policy';
 import { loadCharter, loadProcedure, renderProcedure } from '@cs-agent/procedures';
-import { buildProposals } from './proposals.js';
+import { buildProposals, outreachForbiddenTerms } from './proposals.js';
 import { saveProposal } from './save.js';
 import { dispatchReadTool } from './tools.js';
 
@@ -55,6 +57,11 @@ export async function runProcedure(input: {
 
   const schemaName = schemaOf(procedure.frontmatter.output_schema);
   const now = input.clock.now();
+  const senderFirstName = ownerFirstName(input.bundle.owner?.name);
+  if (input.procedureId === 'draft-renewal-outreach' && !senderFirstName) {
+    await recordDraftSkip(input, now, 'The bundle has no owner name, so no customer draft was written.');
+    return [];
+  }
   const rendered = renderProcedure({
     charterBody: charter.body,
     procedureBody: procedure.body,
@@ -66,6 +73,7 @@ export async function runProcedure(input: {
       signals: input.signals,
       score: input.score,
       as_of: now.toISOString(),
+      ...(input.procedureId === 'draft-renewal-outreach' ? { sender_first_name: senderFirstName } : {}),
     },
   });
 
@@ -108,6 +116,36 @@ export async function runProcedure(input: {
     }
   }
 
+  if (input.procedureId === 'draft-renewal-outreach') {
+    const extra = outreachForbiddenTerms(input);
+    let violations = customerDraftViolations(draftFields(output), extra);
+    if (violations.length > 0) {
+      const retried = await input.llm.generate({
+        messages: [...rendered.messages, { role: 'user', content: draftFeedback(violations) }],
+        schema_name: schemaName,
+        tier: procedure.frontmatter.model_tier,
+        on_tool: onTool,
+      });
+      await logCall(input, rendered.procedure, procedure.frontmatter.model_tier, retried, now);
+      output = OUTPUT_SCHEMAS[schemaName].parse(retried.output);
+      violations = customerDraftViolations(draftFields(output), extra);
+      if (checksCitations(schemaName)) {
+        const cited = reasonsFromStrings(citationRows(schemaName, output), allowed);
+        if (cited.check.ok) {
+          reasons = cited.reasons;
+          if (askedForReview(schemaName, output)) needsReview = true;
+        } else {
+          needsReview = true;
+          reasons = fallbackReasons(input.score, input.bundle);
+        }
+      }
+    }
+    if (violations.length > 0) {
+      await recordDraftSkip(input, now, `Customer draft still violates: ${violations.join('; ')}`);
+      return [];
+    }
+  }
+
   const built = buildProposals({
     procedureId: input.procedureId,
     output,
@@ -116,6 +154,7 @@ export async function runProcedure(input: {
     score: input.score,
     reasons,
     portal: input.portal,
+    policy: input.policy,
     workflow: input.workflow,
     runId: input.runId,
     period: isoWeekPeriod(now),
@@ -149,6 +188,38 @@ function citationRows(
   }
   const brief = output as { lines: string[]; citations: string[] };
   return [{ text: brief.lines.join(' '), citations: brief.citations }];
+}
+
+function draftFields(output: unknown): { subject: string; body: string } {
+  const record = output as { subject?: unknown; body?: unknown };
+  return {
+    subject: typeof record.subject === 'string' ? record.subject : '',
+    body: typeof record.body === 'string' ? record.body : '',
+  };
+}
+
+function draftFeedback(violations: string[]): string {
+  return [
+    'This draft is customer-facing and cannot be stored.',
+    'Remove every item below. Do not mention internal scoring, rules, property names, or markers. Do not sign "The account team". Sign with sender_first_name.',
+    ...violations.map((item) => `- ${item}`),
+    'Return the full JSON object again.',
+  ].join('\n');
+}
+
+async function recordDraftSkip(
+  input: { ledger: LedgerPort; runId: string; procedureId: string; bundle: AccountBundle },
+  now: Date,
+  error: string,
+): Promise<void> {
+  await input.ledger.appendAudit({
+    at: now.toISOString(),
+    actor: 'agent',
+    action: 'needs_review',
+    entity: `${input.procedureId}:${input.bundle.company.ref.id}`,
+    before: { run_id: input.runId },
+    after: { needs_review: true, error },
+  });
 }
 
 function citationFeedback(errors: string[]): string {

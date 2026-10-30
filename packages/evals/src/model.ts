@@ -50,6 +50,7 @@ export interface PreparedModel {
   readonly modelUsage: ModelUsageLine[];
   run(input: ModelRunInput): Promise<ModelOutcome>;
   extractCommitments(input: ModelRunInput): Promise<unknown>;
+  draftRenewal(input: ModelRunInput): Promise<{ subject: string; body: string } | null>;
 }
 
 /**
@@ -133,6 +134,23 @@ export async function prepareModel(mode: 'mock' | 'real'): Promise<PreparedModel
         needsReview: outputNeedsReview(output) || generations.some((generation) => outputNeedsReview(generation)),
       };
     },
+    async draftRenewal(input) {
+      const output = await (runProcedure as (args: unknown) => Promise<unknown>)({
+        procedureId: 'draft-renewal-outreach',
+        bundle: input.bundle,
+        signals: input.signals,
+        score: input.score,
+        llm,
+        hubspot: input.hubspot,
+        ledger,
+        policy: input.policy,
+        portal: input.portal,
+        runId: `eval-draft-${input.bundle.company.ref.id}`,
+        clock: input.clock,
+        workflow: 'eval',
+      });
+      return draftPayload(output);
+    },
     async extractCommitments(input) {
       generations.length = 0;
       await (runProcedure as (args: unknown) => Promise<unknown>)({
@@ -205,6 +223,19 @@ async function loadLedger(): Promise<unknown> {
   } catch {
     return undefined;
   }
+}
+
+function draftPayload(value: unknown): { subject: string; body: string } | null {
+  if (!Array.isArray(value)) return null;
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    if (record.kind !== 'draft_outreach' || !record.payload || typeof record.payload !== 'object') continue;
+    const payload = record.payload as Record<string, unknown>;
+    if (typeof payload.subject !== 'string' || typeof payload.body !== 'string') continue;
+    return { subject: payload.subject, body: payload.body };
+  }
+  return null;
 }
 
 function outputEscalates(value: unknown): boolean {

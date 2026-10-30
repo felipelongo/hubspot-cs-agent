@@ -97,6 +97,7 @@ describe('eval bars', () => {
       commitment_precision: 1,
       commitment_citation_validity: 1,
       overdue_flag_accuracy: 1,
+      customer_draft_clean: true,
     });
     const perfect = {
       citation_validity: 1,
@@ -108,6 +109,7 @@ describe('eval bars', () => {
       commitment_precision: 1,
       commitment_citation_validity: 1,
       overdue_flag_accuracy: 1,
+      customer_draft_clean: true,
     };
     expect(passesThresholds(perfect, thresholds)).toBe(true);
     expect(passesThresholds({ ...perfect, at_risk_recall: 0.89 }, thresholds)).toBe(false);
@@ -118,6 +120,7 @@ describe('eval bars', () => {
     expect(passesThresholds({ ...perfect, commitment_precision: 0.5 }, thresholds)).toBe(false);
     expect(passesThresholds({ ...perfect, commitment_citation_validity: 0.5 }, thresholds)).toBe(false);
     expect(passesThresholds({ ...perfect, overdue_flag_accuracy: 0.5 }, thresholds)).toBe(false);
+    expect(passesThresholds({ ...perfect, customer_draft_clean: false }, thresholds)).toBe(false);
     expect(passesThresholds({ ...perfect, commitments_scored: false, commitment_recall: 0 }, thresholds)).toBe(true);
   });
 
@@ -201,6 +204,7 @@ function reportFixture(overrides: Partial<EvalReport> = {}): EvalReport {
     predicted_commitments: 0,
     matched_commitments: 0,
     commitment_misses: [],
+    customer_draft_clean: true,
     ...overrides,
   };
 }
@@ -363,6 +367,8 @@ describe('eval report', () => {
     expect(markdown).toContain('Overdue flag accuracy');
     expect(markdown).toContain('co-commit-01 Vellumark');
     expect(markdown).toContain('50.0% (1/2)');
+    expect(markdown).toContain('Customer draft clean');
+    expect(markdown).toContain('not scored');
     expect(markdown).toContain('mock model; no API spend');
     expect(markdown).toContain('Tokens: 0 input, 0 output, 0 total');
   });

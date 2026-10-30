@@ -11,6 +11,7 @@ export interface EvalThresholds {
   commitment_precision: number;
   commitment_citation_validity: number;
   overdue_flag_accuracy: number;
+  customer_draft_clean: boolean;
 }
 
 export function thresholdsPath(): string {
@@ -29,6 +30,7 @@ export function loadThresholds(path = thresholdsPath()): EvalThresholds {
     commitment_precision: requiredNumber(raw, 'commitment_precision'),
     commitment_citation_validity: requiredNumber(raw, 'commitment_citation_validity'),
     overdue_flag_accuracy: requiredNumber(raw, 'overdue_flag_accuracy'),
+    customer_draft_clean: requiredBoolean(raw, 'customer_draft_clean'),
   };
 }
 

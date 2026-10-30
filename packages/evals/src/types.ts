@@ -66,6 +66,7 @@ export interface EvalReport {
   commitment_precision: number;
   commitment_citation_validity: number;
   overdue_flag_accuracy: number;
+  customer_draft_clean: boolean;
   expected_commitments: number;
   predicted_commitments: number;
   matched_commitments: number;

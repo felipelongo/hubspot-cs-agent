@@ -9,8 +9,8 @@
       "sha256": "180523c35709b8fe3993d7e0d4f3aaf194cb28499beea158a09e28fee333ced5"
     },
     "draft-renewal-outreach": {
-      "version": "1.0.0",
-      "sha256": "0e260ef60ba9920f268cf411c5366aefb9a77b7125f62e82b56d63d3540ae927"
+      "version": "1.1.0",
+      "sha256": "623814e470013daf7f8067b1504ada7a6c4fd9333862a3b3e410bd3ac38fb62a"
     },
     "escalation-brief": {
       "version": "1.0.0",

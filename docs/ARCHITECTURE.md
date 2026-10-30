@@ -130,10 +130,10 @@ Each folder has a README. The lines below describe what that block does.
 
 ## Safety choices that are deliberate
 
-- `draft_outreach` never sends email. After approval it becomes a HubSpot task of type EMAIL, plus a note. A person sends it from HubSpot.
+- `draft_outreach` never sends email. After approval it becomes a HubSpot task of type EMAIL, plus an internal note. A person sends the email from HubSpot. The task text is the customer draft. The note holds the idempotency marker.
 - `update_deal_stage` exists and is policy-gated to approval. The renewal sweep does not move stages.
 - `mode: shadow` proposes and logs, and writes nothing. `dry_run` prints the request. `live` commits what policy allows.
-- Idempotency keys look like `renewal-risk:company:<id>:task:<iso-week>`. The ledger is the primary duplicate check. A marker `[cs-agent:<key>]` in the HubSpot body is the backup if the database is lost.
+- Idempotency keys look like `renewal-risk:company:<id>:task:<iso-week>`. The ledger is the primary duplicate check. A marker `[cs-agent:<key>]` on internal notes, tasks, and properties is the backup if the database is lost. The customer email task for `draft_outreach` does not carry that marker. A retry recognizes it by the approved subject and body.
 - An approval stores `action_hash`, the sha256 of the canonical JSON of `{kind, target, payload}`. An edit supersedes the old proposal. The new one needs its own approval. Commit refuses a hash mismatch.
 - Health points are subtracted in `config/scoring-rules.yaml` (`rules_version: 1.0.0`), starting at 100. The model writes the reasons. It does not pick the number.
 - Search is not used to confirm a write. Search lags. The ledger and the marker do that job.

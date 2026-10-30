@@ -6,6 +6,8 @@ import { computeSignals } from '@cs-agent/signals';
 import {
   CommitmentExtractSchema,
   collectBundleRefs,
+  customerDraftExtraTerms,
+  customerDraftViolations,
   frozenClock,
   type AccountBundle,
   type Clock,
@@ -15,6 +17,7 @@ import { loadMockHubSpot, loadSeed } from './adapters.js';
 import {
   atRiskStats,
   citationValidity,
+  isAtRiskClass,
   commitmentStats,
   injectionBandCorrect,
   passesThresholds,
@@ -50,6 +53,14 @@ export async function runEval(input?: { clock?: Clock; llm?: 'mock' | 'real' }):
   const trapRows: { archetype: string; actual_band: string }[] = [];
   const injectionRows: { injection_probe: boolean; expected_band: string; actual_band: string; leak: boolean }[] = [];
   const commitmentInputs: CommitmentAccountInput[] = [];
+  const extraForbidden = customerDraftExtraTerms({
+    ruleIds: [...rules.rules.map((rule) => rule.id), ...policy.rules.map((rule) => rule.id)],
+    reasonTexts: rules.rules.map((rule) => rule.label),
+    propertyNames: Object.values(portal.properties).flatMap((group) => Object.values(group)),
+  });
+  let draftTargets = 0;
+  let draftCount = 0;
+  const draftViolations: string[] = [];
 
   for (const account of expected.accounts) {
     const bundle = await buildAccountBundle({
@@ -124,6 +135,32 @@ export async function runEval(input?: { clock?: Clock; llm?: 'mock' | 'real' }):
       });
     }
 
+    if (model && isAtRiskClass(score.band)) {
+      draftTargets += 1;
+      const draft = await model.draftRenewal({
+        bundle,
+        signals,
+        score,
+        hubspot,
+        policy,
+        portal,
+        clock,
+        allowed,
+      });
+      if (draft) {
+        draftCount += 1;
+        draftViolations.push(
+          ...customerDraftViolations(draft, [
+            ...extraForbidden,
+            ...customerDraftExtraTerms({
+              ruleIds: score.contributions.map((item) => item.rule),
+              reasonTexts: score.contributions.map((item) => item.label),
+            }),
+          ]),
+        );
+      }
+    }
+
     if (model) {
       commitmentInputs.push({
         company_id: account.company_id,
@@ -160,6 +197,8 @@ export async function runEval(input?: { clock?: Clock; llm?: 'mock' | 'real' }):
         matched_commitments: 0,
         misses: [],
       };
+  const customer_draft_clean =
+    model == null || (draftViolations.length === 0 && (draftTargets === 0 || draftCount === draftTargets));
   const passed = passesThresholds(
     {
       citation_validity,
@@ -171,6 +210,7 @@ export async function runEval(input?: { clock?: Clock; llm?: 'mock' | 'real' }):
       commitment_precision: commitments.commitment_precision,
       commitment_citation_validity: commitments.commitment_citation_validity,
       overdue_flag_accuracy: commitments.overdue_flag_accuracy,
+      customer_draft_clean,
     },
     thresholds,
   );
@@ -203,6 +243,7 @@ export async function runEval(input?: { clock?: Clock; llm?: 'mock' | 'real' }):
     commitment_precision: commitments.commitment_precision,
     commitment_citation_validity: commitments.commitment_citation_validity,
     overdue_flag_accuracy: commitments.overdue_flag_accuracy,
+    customer_draft_clean,
     expected_commitments: commitments.expected_commitments,
     predicted_commitments: commitments.predicted_commitments,
     matched_commitments: commitments.matched_commitments,
