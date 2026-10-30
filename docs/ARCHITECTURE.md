@@ -29,7 +29,7 @@ flowchart LR
   Ledger --> Commit --> HS
 ```
 
-The model sits inside the LLM port. Its tools are `hubspot_read_record`, `hubspot_list_associations`, and `propose_action`. It never receives `createRecord`, `updateRecord`, or `batchUpsert`.
+The model sits inside the LLM port. Its tools are `hubspot_read_record`, `hubspot_list_associations`, and `propose_action`. It never receives `createRecord`, `updateRecord`, or `batchUpsert`. `propose_action` is pushed onto a list the runner never reads, so it is not where actions come from. The runner builds proposals from the validated procedure output. An outreach draft becomes `draft_outreach`. Overdue commitments become tasks. A QSR prep becomes a note. An escalation brief becomes `escalate`. The renewal assessment ignores `recommended_actions`. It always proposes a score write and a note, and it adds an owner task when the band is at risk or critical, or when renewal is within 21 days and no meeting is booked. Where the schema has reasons, citations are checked before they are stored. Policy then marks each proposal auto, approval, or escalate.
 
 ## One sweep
 
@@ -92,7 +92,7 @@ flowchart TB
   Customer[Notes, emails, tickets]
   Customer -->|fenced as data| Prompt
   Prompt --> Model
-  Model -->|read tools and propose_action| Runner
+  Model -->|read tools and structured output| Runner
   Runner -->|validated citations and action_hash| Ledger
   Human[Human in the console]
   Human -->|approval stores the hash| Ledger
@@ -104,7 +104,7 @@ Customer text cannot become an instruction. A seeded note tells the model to ign
 
 ## Blocks
 
-Each folder has a README with the same one-sentence description.
+Each folder has a README. The lines below describe what that block does.
 
 | Block | One sentence |
 | --- | --- |
@@ -116,7 +116,7 @@ Each folder has a README with the same one-sentence description.
 | Signals | Turns raw records into facts like "no meeting in 47 days" or "3 open high-severity tickets." |
 | Scoring | A versioned, explainable health score; each point traces to a signal and a record. |
 | Procedures | The agent's playbooks: versioned instructions for each job, like an SOP library. |
-| LLM port | One interface to the model, with structured outputs, retries and cost logging. |
+| LLM port | One interface to the model, with structured outputs and retries. Per-call cost is token usage from the Anthropic SDK usage block times that model's USD price in `config/model-prices.yaml` (model ids from `LLM_MODEL_FAST` and `LLM_MODEL_STRONG`, for example `claude-haiku-5-5` and `claude-sonnet-5-5`). The sum is stored on the run and printed by `pnpm eval`. |
 | Agent runner | Runs a procedure, checks its output, and turns it into proposals. |
 | Ledger | The system's memory and audit trail: every run, proposal, approval and write. |
 | Policy | The rules for what can happen automatically, what needs a human, and what goes to a manager. |
@@ -124,7 +124,7 @@ Each folder has a README with the same one-sentence description.
 | Approvals | Where humans say yes or no. A web console today; Slack can be added behind the same interface. |
 | Workflows | Chains the blocks into a job, for example the renewal-risk sweep. |
 | Console | A small web app: approval queue, runs, audit log, metrics. |
-| CLI | Commands to set up, seed, run a sweep, and run on a schedule or a webhook. |
+| CLI | Commands to set up, seed, run a sweep, approve, evaluate, backtest, and serve the console. |
 | Seed | A fictional customer base with planted problems, so the demo and tests have known answers. |
 | Evals | Checks the agent gets the known answers right. The same scorer backtests history. |
 
@@ -151,14 +151,14 @@ Each folder has a README with the same one-sentence description.
 
 ## Schedule and webhook
 
-A weekday morning sweep:
+There is no scheduler in this repo. The cron block below is an example a deployer would install on a host with a persistent database:
 
 ```cron
 CRON_TZ=America/New_York
 0 7 * * 1-5 cd /path/to/cs-agent && pnpm cs sweep renewal-risk-sweep --mode live
 ```
 
-On Vercel, the same command is the cron target. The console's `POST /webhooks/hubspot` checks the v3 signature (`X-HubSpot-Signature-v3`, timestamp within 5 minutes) and answers 202. Wiring that stub to a single-account sweep is the next step, not this demo.
+Hosted deployment is future work. Vercel, for example, needs a hosted Postgres instead of the default local PGlite file (`data/pglite`), which would not persist there. The console's `POST /webhooks/hubspot` checks the v3 signature (`X-HubSpot-Signature-v3`, timestamp within 5 minutes) and answers 202. Wiring that stub to a single-account sweep is the next step, not this demo.
 
 ## Next
 
