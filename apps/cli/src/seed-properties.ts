@@ -1,4 +1,5 @@
 import { DailyRateLimitError, type HubSpotPort, type ObjectType, type PropertyDefinition, type SeedDatabase } from '@cs-agent/core';
+import { HubSpotApiError } from '@cs-agent/hubspot';
 
 const GROUP = 'cs_agent';
 const ID_PROPERTY = 'seed_external_id';
@@ -16,7 +17,14 @@ const BOOLEAN_OPTIONS = [
  * a true/false flag like cs_left_company / seed_stage_regressed, or text.
  * seed_external_id is text, and unique only on company, contact, deal, and ticket.
  */
-export async function ensureSeedProperties(hubspot: HubSpotPort, database: SeedDatabase): Promise<number> {
+export function isHubSpotForbidden(error: unknown): boolean {
+  return error instanceof HubSpotApiError && error.status === 403;
+}
+
+export async function ensureSeedProperties(
+  hubspot: HubSpotPort,
+  database: SeedDatabase,
+): Promise<{ created: number; emailsSkipped: boolean }> {
   const groups: [ObjectType, { properties: Record<string, string> }[]][] = [
     ['company', database.companies],
     ['contact', database.contacts],
@@ -28,8 +36,19 @@ export async function ensureSeedProperties(hubspot: HubSpotPort, database: SeedD
     ['call', database.activities.filter((row) => row.object === 'call')],
   ];
   let created = 0;
-  for (const [object, rows] of groups) created += await ensureObject(hubspot, object, rows);
-  return created;
+  let emailsSkipped = false;
+  for (const [object, rows] of groups) {
+    try {
+      created += await ensureObject(hubspot, object, rows);
+    } catch (error) {
+      if (object === 'email' && isHubSpotForbidden(error)) {
+        emailsSkipped = true;
+        continue;
+      }
+      throw error;
+    }
+  }
+  return { created, emailsSkipped };
 }
 
 async function ensureObject(
@@ -67,6 +86,7 @@ async function createSeedProperty(
   try {
     return await hubspot.createProperty(object, property);
   } catch (error) {
+    if (object === 'email' && isHubSpotForbidden(error)) throw error;
     if (!ENGAGEMENTS.has(object) || error instanceof DailyRateLimitError) throw error;
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(`HubSpot refused to create property "${property.name}" on ${object}. ${reason}`);

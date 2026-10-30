@@ -13,7 +13,7 @@ import type {
   SeedDatabase,
   UpsertInput,
 } from '@cs-agent/core';
-import { MockHubSpot } from '@cs-agent/hubspot';
+import { HubSpotApiError, MockHubSpot } from '@cs-agent/hubspot';
 import { resetSeed, seedHubSpot } from './seed.js';
 
 const portal = loadPortalConfig();
@@ -400,6 +400,105 @@ describe('seedHubSpot against a portal that rejects unknown upserts', () => {
   });
 });
 
+describe('seedHubSpot when the token lacks the email scope', () => {
+  it('skips emails on a 403, writes the other activities, and skips associations to those emails', async () => {
+    const hubspot = new ScopeDeniedPortal('email');
+    const source = strictDatabase();
+    source.activities.push({
+      id: 'email-2',
+      object: 'email',
+      properties: {
+        hs_email_subject: 'second',
+        hubspot_owner_id: 'owner-avery',
+        seed_external_id: 'email-2',
+        seed_origin: 'cs-agent-seed',
+      },
+    });
+    source.associations = [
+      { from: { object: 'company', id: 'co-1' }, to: { object: 'note', id: 'note-1' } },
+      { from: { object: 'company', id: 'co-1' }, to: { object: 'email', id: 'email-1' } },
+      { from: { object: 'email', id: 'email-2' }, to: { object: 'contact', id: 'contact-1' } },
+      { from: { object: 'company', id: 'co-1' }, to: { object: 'call', id: 'call-1' } },
+    ];
+
+    const summary = await seedHubSpot(hubspot, portal, source);
+
+    expect(summary).toContain(
+      'Skipped emails (2): token lacks the email scope (sales-email-read). Add it and re-run seed.',
+    );
+    expect(summary).toContain('Properties created 23.');
+    expect(summary).toContain('activities 3.');
+    expect(summary).toContain('Associations 2.');
+    expect(hubspot.recordsOf('email')).toEqual([]);
+    expect(hubspot.recordsOf('note')).toHaveLength(1);
+    expect(hubspot.recordsOf('meeting')).toHaveLength(1);
+    expect(hubspot.recordsOf('call')).toHaveLength(1);
+    expect(hubspot.createdProperties.some((item) => item.object === 'email')).toBe(false);
+    expect(hubspot.links.map((link) => [link.from.object, link.to.object])).toEqual([
+      ['company', 'note'],
+      ['company', 'call'],
+    ]);
+
+    const reset = await resetSeed(hubspot);
+    expect(reset).toContain('email: skipped (token lacks the email scope)');
+    expect(reset).toContain('note: 1');
+    expect(reset).toContain('meeting: 1');
+    expect(reset).toContain('call: 1');
+    expect(reset).toContain('Archived 7 records with seed_external_id.');
+    expect(reset).not.toContain('email: 0');
+    expect(reset).not.toContain('email: 1');
+  });
+
+  it('skips emails when creating an email property returns 403 and still writes later activities', async () => {
+    const hubspot = new ScopeDeniedPortal('email', 'create');
+    const source = strictDatabase();
+    source.associations = [
+      { from: { object: 'company', id: 'co-1' }, to: { object: 'meeting', id: 'meeting-1' } },
+      { from: { object: 'company', id: 'co-1' }, to: { object: 'email', id: 'email-1' } },
+    ];
+
+    const summary = await seedHubSpot(hubspot, portal, source);
+
+    expect(summary).toContain(
+      'Skipped emails (1): token lacks the email scope (sales-email-read). Add it and re-run seed.',
+    );
+    expect(hubspot.recordsOf('email')).toEqual([]);
+    expect(hubspot.recordsOf('note')).toHaveLength(1);
+    expect(hubspot.recordsOf('meeting')).toHaveLength(1);
+    expect(hubspot.recordsOf('call')).toHaveLength(1);
+    expect(hubspot.links.map((link) => [link.from.object, link.to.object])).toEqual([['company', 'meeting']]);
+  });
+
+  it('skips emails when searching email records returns 403', async () => {
+    const hubspot = new ScopeDeniedPortal('email', 'records');
+    const summary = await seedHubSpot(hubspot, portal, strictDatabase());
+
+    expect(summary).toContain(
+      'Skipped emails (1): token lacks the email scope (sales-email-read). Add it and re-run seed.',
+    );
+    expect(summary).toContain('Properties created 25.');
+    expect(hubspot.recordsOf('email')).toEqual([]);
+    expect(hubspot.recordsOf('note')).toHaveLength(1);
+    expect(hubspot.recordsOf('meeting')).toHaveLength(1);
+    expect(hubspot.recordsOf('call')).toHaveLength(1);
+    expect(hubspot.createdProperties.some((item) => item.object === 'email' && item.property.name === 'seed_external_id')).toBe(
+      true,
+    );
+  });
+
+  it('still throws when a non-email object returns 403', async () => {
+    const hubspot = new ScopeDeniedPortal('note');
+    await expect(seedHubSpot(hubspot, portal, strictDatabase())).rejects.toBeInstanceOf(HubSpotApiError);
+    await expect(seedHubSpot(hubspot, portal, strictDatabase())).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('still throws when reset search returns 403 for a non-email object', async () => {
+    const hubspot = new ScopeDeniedPortal('call', 'records');
+    await expect(resetSeed(hubspot)).rejects.toBeInstanceOf(HubSpotApiError);
+    await expect(resetSeed(hubspot)).rejects.toMatchObject({ status: 403 });
+  });
+});
+
 function createdProp(hubspot: StrictPortal, object: ObjectType, name: string): PropertyDefinition | undefined {
   return hubspot.createdProperties.find((item) => item.object === object && item.property.name === name)?.property;
 }
@@ -546,7 +645,7 @@ class StrictPortal implements HubSpotPort {
     return saved;
   }
 
-  async associate(): Promise<void> {}
+  async associate(_from: RecordRef, _to: RecordRef): Promise<void> {}
 
   async archive(record: RecordRef): Promise<void> {
     this.records.delete(`${record.object}:${record.id}`);
@@ -645,5 +744,58 @@ class StrictPortal implements HubSpotPort {
       if (filter.operator === 'EQ') return value === filter.value;
       return false;
     });
+  }
+}
+
+/** 403s one object the way a token without that object's scope does. */
+class ScopeDeniedPortal extends StrictPortal {
+  readonly links: { from: RecordRef; to: RecordRef }[] = [];
+
+  constructor(
+    private readonly denied: ObjectType,
+    private readonly mode: 'all' | 'create' | 'records' = 'all',
+  ) {
+    super();
+  }
+
+  override async listProperties(object: ObjectType): Promise<PropertyDefinition[]> {
+    this.forbid(object, 'list');
+    return super.listProperties(object);
+  }
+
+  override async createProperty(object: ObjectType, property: PropertyDefinition): Promise<{ created: boolean }> {
+    this.forbid(object, 'create');
+    return super.createProperty(object, property);
+  }
+
+  override async search(object: ObjectType, request: SearchRequest): Promise<{ results: CrmRecord[]; after?: string }> {
+    this.forbid(object, 'records');
+    return super.search(object, request);
+  }
+
+  override async createRecord(object: ObjectType, write: ObjectWrite): Promise<CrmRecord> {
+    this.forbid(object, 'records');
+    return super.createRecord(object, write);
+  }
+
+  override async updateRecord(record: RecordRef, properties: Record<string, string>): Promise<CrmRecord> {
+    this.forbid(record.object, 'records');
+    return super.updateRecord(record, properties);
+  }
+
+  override async associate(from: RecordRef, to: RecordRef): Promise<void> {
+    if (from.object === this.denied || to.object === this.denied) {
+      throw new HubSpotApiError(403, { message: 'missing scope' });
+    }
+    this.links.push({ from, to });
+  }
+
+  private forbid(object: ObjectType, phase: 'list' | 'create' | 'records'): void {
+    if (object !== this.denied) return;
+    const denied =
+      this.mode === 'all' ||
+      (this.mode === 'create' && phase === 'create') ||
+      (this.mode === 'records' && phase === 'records');
+    if (denied) throw new HubSpotApiError(403, { message: 'missing scope' });
   }
 }

@@ -9,7 +9,7 @@ The app is installed in one portal. Use a **static auth** access token and **pri
 | `crm.objects.companies.read` | Read the company that a sweep is scoring. |
 | `crm.objects.companies.write` | Write the health fields, and any other company update setup, seed, or commit owns. |
 | `crm.objects.contacts.read` | Read the people on the account. |
-| `crm.objects.contacts.write` | Seed and update contacts. This is also the fallback for notes, tasks, meetings, calls, and emails when a portal cannot grant the granular engagement scopes below. |
+| `crm.objects.contacts.write` | Seed and update contacts. This is also the fallback for notes, tasks, meetings, and calls when a portal cannot grant the granular engagement scopes below. It does not grant email records. |
 | `crm.objects.deals.read` | Read renewal deals. |
 | `crm.objects.deals.write` | Seed deals and let commit update deal fields it owns. |
 | `tickets` | Read and update tickets. HubSpot still publishes ticket access as this one scope. |
@@ -45,7 +45,7 @@ Prefer the granular scopes when the app's scope picker shows them:
 | `crm.objects.emails.read` | Read CRM email records (direction, subject, time). This does not send mail. |
 | `crm.objects.emails.write` | Store an email record on the timeline. This does not send mail. |
 
-Some HubSpot apps still cannot select those granular scopes. The engagement APIs' documented fallback is `crm.objects.contacts.read` and `crm.objects.contacts.write`, and that is why those two contact scopes stay on the list even when the granular ones are available. Do not drop the contact scopes and assume every portal can grant `crm.objects.notes.*` and the rest.
+Some HubSpot apps still cannot select the granular note, task, meeting, and call scopes. For those objects the engagement APIs' documented fallback is `crm.objects.contacts.read` and `crm.objects.contacts.write`, so those contact scopes stay on the list. Emails are not part of that fallback. They need `sales-email-read` or `crm.objects.emails.read` and `crm.objects.emails.write`. Seed skips email records when the token lacks that scope and continues with the other objects.
 
 ## Rate limits
 

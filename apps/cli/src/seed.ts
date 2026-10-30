@@ -1,6 +1,6 @@
 import type { CrmRecord, HubSpotPort, ObjectType, Pipeline, RecordRef, SeedDatabase, UpsertInput } from '@cs-agent/core';
 import type { PortalConfig } from '@cs-agent/config';
-import { ensureSeedProperties } from './seed-properties.js';
+import { ensureSeedProperties, isHubSpotForbidden } from './seed-properties.js';
 import { setupPortal } from './services.js';
 
 const SEEDED_OBJECTS: ObjectType[] = ['company', 'contact', 'deal', 'ticket', 'note', 'email', 'meeting', 'call', 'task'];
@@ -13,7 +13,8 @@ const SEARCH_LIMIT = 100;
 export async function seedHubSpot(hubspot: HubSpotPort, portal: PortalConfig, database: SeedDatabase): Promise<string> {
   const mapped = await mapFixtureOwners(hubspot, database.owners);
   const setup = await setupPortal(hubspot, portal);
-  const propertiesCreated = await ensureSeedProperties(hubspot, database);
+  const properties = await ensureSeedProperties(hubspot, database);
+  let emailsSkipped = properties.emailsSkipped;
   const renewal = await ensureRenewalPipeline(hubspot, portal);
   const ids = new Map<string, string>();
   const companies = await upsert(hubspot, 'company', rewriteOwnerIds(database.companies, mapped.ids), ids);
@@ -36,30 +37,58 @@ export async function seedHubSpot(hubspot: HubSpotPort, portal: PortalConfig, da
       database.activities.filter((activity) => activity.object === object),
       mapped.ids,
     );
-    const written = await writeActivities(hubspot, object, rows, ids);
-    activityCounts[object] = written.length;
+    if (object === 'email' && emailsSkipped) {
+      activityCounts[object] = 0;
+      continue;
+    }
+    try {
+      const written = await writeActivities(hubspot, object, rows, ids);
+      activityCounts[object] = written.length;
+    } catch (error) {
+      if (object === 'email' && isHubSpotForbidden(error)) {
+        emailsSkipped = true;
+        activityCounts[object] = 0;
+        continue;
+      }
+      throw error;
+    }
   }
   let associations = 0;
   for (const link of database.associations) {
+    if (emailsSkipped && (link.from.object === 'email' || link.to.object === 'email')) continue;
     await hubspot.associate(resolveRef(ids, link.from), resolveRef(ids, link.to));
     associations += 1;
   }
   const activityTotal = Object.values(activityCounts).reduce((sum, count) => sum + count, 0);
-  return [
+  const lines = [
     `Setup created ${setup.created.length}, unchanged ${setup.unchanged.length}, findings ${setup.findings.length}.`,
     ...setup.findings.map((finding) => `  finding: ${finding}`),
-    `Properties created ${propertiesCreated}. Pipeline ${renewal.created ? 'created' : 'unchanged'}.`,
+    `Properties created ${properties.created}. Pipeline ${renewal.created ? 'created' : 'unchanged'}.`,
     `Owners: ${mapped.matched} matched by email, ${mapped.fallback} fell back to the token's user.`,
     `Upserted companies ${companies.length}, contacts ${contacts.length}, deals ${deals.length}, tickets ${tickets.length}, activities ${activityTotal}.`,
-    `Associations ${associations}.`,
-  ].join('\n');
+  ];
+  if (emailsSkipped) {
+    const skipped = database.activities.filter((activity) => activity.object === 'email').length - (activityCounts.email ?? 0);
+    lines.push(`Skipped emails (${skipped}): token lacks the email scope (sales-email-read). Add it and re-run seed.`);
+  }
+  lines.push(`Associations ${associations}.`);
+  return lines.join('\n');
 }
 
 export async function resetSeed(hubspot: HubSpotPort): Promise<string> {
   const lines: string[] = [];
   let total = 0;
   for (const object of SEEDED_OBJECTS) {
-    const records = await searchSeeded(hubspot, object);
+    let records: CrmRecord[];
+    try {
+      records = await searchSeeded(hubspot, object);
+    } catch (error) {
+      if (object === 'email' && isHubSpotForbidden(error)) {
+        lines.push('email: skipped (token lacks the email scope)');
+        continue;
+      }
+      throw error;
+    }
     for (const record of records) await hubspot.archive(record.ref);
     lines.push(`${object}: ${records.length}`);
     total += records.length;
