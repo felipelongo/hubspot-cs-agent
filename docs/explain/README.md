@@ -1,6 +1,6 @@
 # Explain it in 30 seconds
 
-One block, one breath. The interview answers are in `INTERVIEW.md`.
+One block, one breath.
 
 ## Core
 

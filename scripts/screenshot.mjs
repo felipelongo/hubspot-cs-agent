@@ -42,9 +42,5 @@ if (!(await page.locator('main').innerText()).includes('25 minutes')) {
   throw new Error('Metrics page is missing the hours-saved assumption');
 }
 
-await page.setViewportSize({ width: 390, height: 844 });
-await page.goto(`${base}/`);
-await page.screenshot({ path: `${out}/08-queue-mobile.png`, fullPage: true });
-
 await browser.close();
 console.log(`Saved screenshots to ${out}. Opened ${proposalHref}.`);

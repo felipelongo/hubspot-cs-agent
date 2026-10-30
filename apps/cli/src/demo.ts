@@ -5,13 +5,12 @@ import { loadDotEnv, repoRoot } from '@cs-agent/config';
 import { decideApproval } from '@cs-agent/approvals';
 import { runWorkflow } from '@cs-agent/workflows';
 import { loadRuntimeConfig, systemClock } from './runtime.js';
-import { buildSeed, commitAction, createLedger, createLlm, openMockHubSpot, writeFixtures } from './services.js';
+import { buildSeed, commitAction, createLedger, createLlm, openMockHubSpot } from './services.js';
 
 /** One fresh file ledger so the second sweep is idempotent and `pnpm cs serve` can show the queue. */
 export async function runDemo(): Promise<void> {
   const clock = systemClock;
   const { database } = buildSeed(clock);
-  await writeFixtures(clock);
 
   const hubspot = openMockHubSpot(database);
   const env = withoutKeys(process.env);

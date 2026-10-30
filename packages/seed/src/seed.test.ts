@@ -1,6 +1,6 @@
-import { readFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadScoringRules } from '@cs-agent/config';
 import { daysBetween, frozenClock, parseHubspotDate, SIGNAL_KEYS, type Signal } from '@cs-agent/core';
@@ -402,14 +402,18 @@ describe('fictional Harborboard seed', () => {
     expect(database.companies.some((company) => company.id.startsWith('hist-'))).toBe(false);
   });
 
-  it('writes pretty fixtures next to the repo', async () => {
-    const dir = resolve(dirname(fileURLToPath(import.meta.url)), '../../../fixtures');
-    await writeFixtures(clock);
-    const seedText = await readFile(resolve(dir, 'seed.json'), 'utf8');
-    const expectedText = await readFile(resolve(dir, 'expected.json'), 'utf8');
-    expect(seedText.endsWith('\n')).toBe(true);
-    expect(seedText).toContain('\n  "vendor"');
-    expect(JSON.parse(seedText)).toEqual(database);
-    expect(JSON.parse(expectedText)).toEqual(expected);
+  it('writes pretty seed and expected JSON', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'seed-fixtures-'));
+    try {
+      await writeFixtures(clock, dir);
+      const seedText = await readFile(join(dir, 'seed.json'), 'utf8');
+      const expectedText = await readFile(join(dir, 'expected.json'), 'utf8');
+      expect(seedText.endsWith('\n')).toBe(true);
+      expect(seedText).toContain('\n  "vendor"');
+      expect(JSON.parse(seedText)).toEqual(database);
+      expect(JSON.parse(expectedText)).toEqual(expected);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

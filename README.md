@@ -23,7 +23,7 @@ pnpm demo:mock
 pnpm cs serve
 ```
 
-No `.env` is required. With no `.env`, HubSpot is an in-memory `MockHubSpot` seeded from `fixtures/seed.json` (24 fictional nonprofit clients on example.org) and the model is `MockLLM`. Cost is $0. `pnpm demo:mock` builds that seed in memory and writes the file. It still uses those mocks when a HubSpot token or an Anthropic key is set.
+No `.env` is required. With no `.env`, HubSpot is an in-memory `MockHubSpot` seeded from `fixtures/seed.json` (24 fictional nonprofit clients on example.org) and the model is `MockLLM`. Cost is $0. `pnpm demo:mock` builds that seed in memory and does not write the file. It still uses those mocks when a HubSpot token or an Anthropic key is set.
 
 A second sweep makes no new writes. The command prints the accounts, committed, and awaiting counts.
 
@@ -49,3 +49,7 @@ If the token or the Anthropic key is missing, the process says so and uses the m
 - `docs/demo/DEMO-SCRIPT.md` for the 3-minute and 60-second recordings
 - `docs/plan/FIRST-30-DAYS.md` for the engagement plan
 - `docs/explain/` for a spoken explanation of each block
+
+## License
+
+MIT. See LICENSE.

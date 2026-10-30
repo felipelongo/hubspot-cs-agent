@@ -2,7 +2,7 @@
 
 Record the mock demo. It does not need a HubSpot token. Say the times out loud as America/New_York only if you add a lower-third; the console itself prints UTC.
 
-Console shots for this cut are in `docs/demo/screenshots/`. HubSpot shots wait on a token; the checklist lists them.
+Console shots for this cut are in `docs/demo/screenshots/` (`01-login.png` through `07-metrics.png`), from a test-portal run. `08-hubspot-contact.png` is a contact record from a HubSpot developer test portal. The checklist lists the HubSpot shots still to capture.
 
 ## Before you record
 

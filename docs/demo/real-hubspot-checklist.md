@@ -50,7 +50,7 @@ HubSpot often refuses to create users from the API. The seed maps every owner to
 
 ## Screenshots to take once the portal is connected
 
-Save them next to `docs/demo/screenshots/` when you have them. The console shots in that folder are from the mock demo.
+`docs/demo/screenshots/` already has the console shots from a test-portal run, and `08-hubspot-contact.png` (a contact record for the fictional client). Save the rest in that folder:
 
 - Company properties: `cs_health_score`, `cs_health_band`, `cs_risk_reasons`, `cs_last_assessed_at`, `cs_rules_version`, `cs_agent_last_run_id`
 - The timeline note that starts `CS Agent: set health to`
