@@ -121,6 +121,33 @@ describe('customer draft checker', () => {
     expect(customerDraftViolations({ subject: cleanDraft.subject, body: 'thanks,\nthe account team' }).length).toBeGreaterThan(0);
   });
 
+  it.each([
+    ['guarantee pace', 'We slipped off the guarantee pace this quarter.', 'guarantee pace'],
+    ['gift pace', 'The gift   pace is not something to put in this note.', 'gift pace'],
+    ['behind the guarantee', 'Results sit behind\nthe\tguarantee.', 'behind the guarantee'],
+    ['behind the pace', 'Results sit BEHIND THE PACE.', 'behind the pace'],
+    ['attributed gifts', 'The Attributed Gifts figure is an internal number.', 'attributed gifts'],
+    ['working session', 'Could we hold a working session next week?', 'working session'],
+  ])('flags %s', (_term, body, expected) => {
+    expect(customerDraftViolations({ subject: 'Hello', body }).join(' ').toLowerCase()).toContain(expected);
+  });
+
+  it('flags the gift-pace sentence and a working-session offer', () => {
+    const pace = customerDraftViolations({
+      subject: 'Planning ahead',
+      body: 'Gifts logged so far are also behind the guarantee pace.',
+    });
+    const paceText = pace.join(' ').toLowerCase();
+    expect(paceText).toContain('behind the guarantee');
+    expect(paceText).toContain('guarantee pace');
+
+    const session = customerDraftViolations({
+      subject: 'Planning ahead',
+      body: 'I would like a working session on the gifts logged so far.',
+    });
+    expect(session.join(' ').toLowerCase()).toContain('working session');
+  });
+
   it('flags extra internal text and leaves ordinary words alone', () => {
     expect(customerDraftViolations({ subject: 'A brisk walk', body: 'See the bandwidth chart and the brisket order.' })).toEqual([]);
     const extra = customerDraftExtraTerms({

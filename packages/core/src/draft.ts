@@ -6,6 +6,12 @@ const BUILTIN: { label: string; pattern: RegExp }[] = [
   { label: 'score', pattern: /\bscore\b/i },
   { label: 'band', pattern: /\bband\b/i },
   { label: 'review places you', pattern: /review\s+places\s+you/i },
+  { label: 'guarantee pace', pattern: /guarantee\s+pace/i },
+  { label: 'gift pace', pattern: /gift\s+pace/i },
+  { label: 'behind the guarantee', pattern: /behind\s+the\s+guarantee/i },
+  { label: 'behind the pace', pattern: /behind\s+the\s+pace/i },
+  { label: 'attributed gifts', pattern: /attributed\s+gifts/i },
+  { label: 'working session', pattern: /working\s+session/i },
 ];
 
 const MARKER = /\[cs-agent:[^\]]*\]/i;

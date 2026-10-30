@@ -133,15 +133,12 @@ function outreachDraft(data: CustomerData, allowed: Set<string>): unknown {
   const noticed = data.signals?.find((signal) => signal.key === 'champion_left' && signal.value === true);
   const director = data.bundle?.contacts?.find((contact) => contact.role === 'executive_director' && contact.name);
   const unworked = data.bundle?.company?.hot_leads_unworked;
-  const pace = data.signals?.find((signal) => signal.key === 'roi_pace')?.value;
   let fact = seatFact(data) ?? `It has been good to work with the development team at ${name}.`;
   let hello = 'Hello,';
   if ((departed || noticed) && director?.name && typeof unworked === 'number') {
     hello = `Hello ${director.name},`;
     const who = departed?.name ? `${departed.name}'s mailbox came back unavailable, so I am writing to you.` : 'I am writing to you because the development director is no longer there.';
     fact = `${who} Could you tell me who now leads major gifts? I would like to walk through the ${unworked} waiting supporters who are ready to give.`;
-  } else if (typeof pace === 'number' && pace < 0.5) {
-    fact = `Attributed gifts are behind the pace we set against the annual fee. I would like a working session to look at the gifts logged so far and the supporters still waiting.`;
   }
   const lines = [
     hello,

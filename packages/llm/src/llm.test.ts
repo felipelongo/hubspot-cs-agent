@@ -96,6 +96,68 @@ describe('MockLLM', () => {
     expect(words.length).toBeLessThanOrEqual(120);
   });
 
+  it('keeps a behind-pace renewal draft free of gift pace and a working session', async () => {
+    const result = await createMockLlm().generate({
+      messages: [
+        customerMessage({
+          ...criticalAccount,
+          sender_first_name: 'Avery',
+          signals: [{ key: 'roi_pace', value: 0.2, explanation: 'Attributed gifts are behind the pace.' }],
+          bundle: {
+            ...criticalAccount.bundle,
+            owner: { name: 'Avery Quinn' },
+            renewal_deal: { close_date: '2026-11-20' },
+          },
+        }),
+      ],
+      schema_name: 'OutreachDraft',
+      tier: 'strong',
+    });
+    const draft = OutreachDraftSchema.parse(result.output);
+    expect(draft.body).toContain('Avery');
+    expect(draft.body).toContain('November');
+    expect(draft.body).toContain('[booking link]');
+    expect(draft.body.toLowerCase()).not.toContain('working session');
+    expect(draft.body.toLowerCase()).not.toContain('attributed gifts');
+    expect(draft.body.toLowerCase()).not.toContain('behind the pace');
+    expect(customerDraftViolations({ subject: draft.subject, body: draft.body })).toEqual([]);
+  });
+
+  it('asks the executive director who leads major gifts when the development director has left', async () => {
+    const result = await createMockLlm().generate({
+      messages: [
+        customerMessage({
+          sender_first_name: 'Avery',
+          signals: [{ key: 'champion_left', value: true }],
+          bundle: {
+            company: {
+              name: 'Hightide Literacy Fund',
+              ref: { object: 'company', id: 'co-champion-01' },
+              hot_leads_unworked: 30,
+            },
+            owner: { name: 'Avery Quinn' },
+            contacts: [
+              { name: 'Paxton Sutter', role: 'development_director', left_company: true },
+              { name: 'Quilla Thorne', role: 'executive_director', left_company: false },
+            ],
+            renewal_deal: { close_date: '2026-11-20' },
+          },
+        }),
+      ],
+      schema_name: 'OutreachDraft',
+      tier: 'strong',
+    });
+    const draft = OutreachDraftSchema.parse(result.output);
+    expect(draft.body).toContain('Hello Quilla Thorne,');
+    expect(draft.body).toContain('who now leads major gifts');
+    expect(draft.body).toContain('30');
+    expect(draft.body).toContain('November');
+    expect(draft.body).toContain('[booking link]');
+    expect(draft.body).toContain('Avery');
+    expect(draft.body.toLowerCase()).not.toContain('working session');
+    expect(customerDraftViolations({ subject: draft.subject, body: draft.body })).toEqual([]);
+  });
+
   it('marks a promise overdue against as_of, and against 2026-10-30 when no clock is present', async () => {
     const withClock = CommitmentExtractSchema.parse(
       (
