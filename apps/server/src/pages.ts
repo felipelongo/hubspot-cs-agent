@@ -92,7 +92,7 @@ export function runsDocument(runs: RunRecord[]): string {
                 <td>${run.accounts_considered}</td>
                 <td>${run.proposals_created}</td>
                 <td>${run.commits}</td>
-                <td>${run.cost_usd.toFixed(4)}</td>
+                <td>${formatRunCost(run.cost_usd)}</td>
               </tr>`,
             )
             .join('')}</tbody>
@@ -106,7 +106,7 @@ export function runDocument(run: RunRecord, proposals: ProposedAction[], commits
       <p><strong>Started</strong> ${escapeHtml(run.started_at)}</p>
       <p><strong>Finished</strong> ${escapeHtml(run.finished_at ?? 'still running')}</p>
       <p><strong>Accounts</strong> ${run.accounts_considered} · <strong>Proposals</strong> ${run.proposals_created} · <strong>Commits</strong> ${run.commits}</p>
-      <p><strong>Cost</strong> $${run.cost_usd.toFixed(4)}</p>
+      <p><strong>Cost</strong> ${formatRunCost(run.cost_usd, true)}</p>
       ${run.error ? `<p class="error">${escapeHtml(run.error)}</p>` : ''}
     </div>
     <h2>Proposals</h2>
@@ -261,6 +261,12 @@ function age(iso: string, now: Date): string {
   const hours = Math.round(minutes / 60);
   if (hours < 48) return `${hours}h`;
   return `${Math.round(hours / 24)}d`;
+}
+
+function formatRunCost(value: number | null, withDollar = false): string {
+  if (value == null) return 'unknown (no price configured)';
+  const amount = value.toFixed(4);
+  return withDollar ? `$${amount}` : amount;
 }
 
 function percent(value: number | null): string {

@@ -225,9 +225,10 @@ function normalizeLimit(limit: number | undefined): number | undefined {
   return Math.floor(limit);
 }
 
-async function runCost(ledger: LedgerPort, runId: string): Promise<number> {
+async function runCost(ledger: LedgerPort, runId: string): Promise<number | null> {
   try {
     const cost = await ledger.runCost(runId);
+    if (cost == null) return null;
     return typeof cost === 'number' && Number.isFinite(cost) ? cost : 0;
   } catch {
     return 0;

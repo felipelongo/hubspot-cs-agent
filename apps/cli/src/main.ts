@@ -115,9 +115,17 @@ async function sweep(name: string | undefined, flags: Map<string, string | boole
     rules: runtime.rules,
     clock: runtime.clock,
   });
+  const saved = await runtime.ledger.getRun(result.runId);
   console.log(
-    `Run ${result.runId}: proposals ${result.proposals}, committed ${result.committed}, replayed ${result.replayed}, awaiting ${result.awaiting}.`,
+    `Run ${result.runId}: proposals ${result.proposals}, committed ${result.committed}, replayed ${result.replayed}, awaiting ${result.awaiting}. Estimated cost ${formatSweepCost(saved?.cost_usd ?? null, env)}.`,
   );
+}
+
+function formatSweepCost(cost: number | null, env: NodeJS.ProcessEnv): string {
+  if (cost == null) return 'unknown (no price configured)';
+  const amount = `$${cost.toFixed(4)}`;
+  if (!env.ANTHROPIC_API_KEY) return `${amount} (mock model; no API spend)`;
+  return amount;
 }
 
 async function approve(id: string | undefined, flags: Map<string, string | boolean>, env: NodeJS.ProcessEnv): Promise<void> {

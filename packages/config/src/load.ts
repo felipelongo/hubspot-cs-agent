@@ -122,6 +122,22 @@ const PortalSchema = z.object({
 
 export type PortalConfig = z.infer<typeof PortalSchema>;
 
+const ModelPricesSchema = z.object({
+  models: z.record(
+    z.string(),
+    z.object({
+      input_usd_per_mtok: z.number().nonnegative(),
+      output_usd_per_mtok: z.number().nonnegative(),
+    }),
+  ),
+});
+
+export type ModelPrices = z.infer<typeof ModelPricesSchema>['models'];
+
+export function loadModelPrices(path = resolve(repoRoot, 'config/model-prices.yaml')): ModelPrices {
+  return ModelPricesSchema.parse(readYaml(path)).models;
+}
+
 export function loadPortalConfig(path = resolve(repoRoot, 'config/portal.yaml')): PortalConfig {
   return PortalSchema.parse(readYaml(path));
 }

@@ -3,7 +3,7 @@ import type { LlmGenerateInput, LlmGenerateResult, LlmMessage, LlmPort } from '@
 /**
  * Deterministic stand-in for the model.
  * It reads the JSON inside <customer_data> and ignores instructions written in notes.
- * cost_usd is 0. A mock does not spend tokens, and there is no price table.
+ * cost_usd is 0 and model is "mock". This path does not call an API, so the run did not spend.
  */
 export function createMockLlm(): LlmPort {
   return {
