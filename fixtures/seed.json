@@ -2659,7 +2659,7 @@
       "object": "meeting",
       "properties": {
         "hs_meeting_title": "Roadmap review",
-        "hs_meeting_body": "We promised SSO by 2026-03-15. We will send the security packet by 2026-10-01.",
+        "hs_meeting_body": "Walked the roadmap with the operators. Usage looks steady.",
         "hs_meeting_start_time": "2026-10-26T12:00:00.000Z",
         "hs_timestamp": "2026-10-26T12:00:00.000Z",
         "seed_external_id": "co-commit-01-meeting-1",
@@ -2670,8 +2670,8 @@
       "id": "co-commit-01-note-1",
       "object": "note",
       "properties": {
-        "hs_note_body": "Filed the summary of the weekly status.",
-        "hs_timestamp": "2026-10-09T12:00:00.000Z",
+        "hs_note_body": "We promised a security review by 2026-03-15.",
+        "hs_timestamp": "2026-10-20T12:00:00.000Z",
         "seed_external_id": "co-commit-01-note-1",
         "seed_origin": "cs-agent-seed"
       }
@@ -2680,8 +2680,8 @@
       "id": "co-commit-01-note-2",
       "object": "note",
       "properties": {
-        "hs_note_body": "Filed the summary of the weekly status.",
-        "hs_timestamp": "2026-09-14T12:00:00.000Z",
+        "hs_note_body": "We will send the renewal deck by 2026-12-01.",
+        "hs_timestamp": "2026-10-21T12:00:00.000Z",
         "seed_external_id": "co-commit-01-note-2",
         "seed_origin": "cs-agent-seed"
       }
@@ -2690,9 +2690,49 @@
       "id": "co-commit-01-note-3",
       "object": "note",
       "properties": {
+        "hs_note_body": "We will share the QBR notes by 2026-10-30.",
+        "hs_timestamp": "2026-10-22T12:00:00.000Z",
+        "seed_external_id": "co-commit-01-note-3",
+        "seed_origin": "cs-agent-seed"
+      }
+    },
+    {
+      "id": "co-commit-01-note-4",
+      "object": "note",
+      "properties": {
+        "hs_note_body": "The kickoff slide was titled We promised the moon. That was a joke about scope, not a deliverable, and no date was set.",
+        "hs_timestamp": "2026-10-18T12:00:00.000Z",
+        "seed_external_id": "co-commit-01-note-4",
+        "seed_origin": "cs-agent-seed"
+      }
+    },
+    {
+      "id": "co-commit-01-note-5",
+      "object": "note",
+      "properties": {
+        "hs_note_body": "Filed the summary of the weekly status.",
+        "hs_timestamp": "2026-10-09T12:00:00.000Z",
+        "seed_external_id": "co-commit-01-note-5",
+        "seed_origin": "cs-agent-seed"
+      }
+    },
+    {
+      "id": "co-commit-01-note-6",
+      "object": "note",
+      "properties": {
+        "hs_note_body": "Filed the summary of the weekly status.",
+        "hs_timestamp": "2026-09-14T12:00:00.000Z",
+        "seed_external_id": "co-commit-01-note-6",
+        "seed_origin": "cs-agent-seed"
+      }
+    },
+    {
+      "id": "co-commit-01-note-7",
+      "object": "note",
+      "properties": {
         "hs_note_body": "Logged a check-in about onboarding progress.",
         "hs_timestamp": "2026-07-27T12:00:00.000Z",
-        "seed_external_id": "co-commit-01-note-3",
+        "seed_external_id": "co-commit-01-note-7",
         "seed_origin": "cs-agent-seed"
       }
     },
@@ -2701,7 +2741,7 @@
       "object": "meeting",
       "properties": {
         "hs_meeting_title": "Roadmap review",
-        "hs_meeting_body": "We promised SSO by 2026-03-15. We will send the security packet by 2026-10-01.",
+        "hs_meeting_body": "Walked the roadmap with the operators. Usage looks steady.",
         "hs_meeting_start_time": "2026-10-26T12:00:00.000Z",
         "hs_timestamp": "2026-10-26T12:00:00.000Z",
         "seed_external_id": "co-commit-02-meeting-1",
@@ -2712,8 +2752,8 @@
       "id": "co-commit-02-note-1",
       "object": "note",
       "properties": {
-        "hs_note_body": "Filed the summary of the weekly status.",
-        "hs_timestamp": "2026-10-09T12:00:00.000Z",
+        "hs_note_body": "We promised SSO by 2026-10-01.",
+        "hs_timestamp": "2026-10-19T12:00:00.000Z",
         "seed_external_id": "co-commit-02-note-1",
         "seed_origin": "cs-agent-seed"
       }
@@ -2722,8 +2762,8 @@
       "id": "co-commit-02-note-2",
       "object": "note",
       "properties": {
-        "hs_note_body": "Logged a check-in about onboarding progress.",
-        "hs_timestamp": "2026-09-14T12:00:00.000Z",
+        "hs_note_body": "We will send the security packet by 2026-11-15.",
+        "hs_timestamp": "2026-10-15T12:00:00.000Z",
         "seed_external_id": "co-commit-02-note-2",
         "seed_origin": "cs-agent-seed"
       }
@@ -2732,9 +2772,39 @@
       "id": "co-commit-02-note-3",
       "object": "note",
       "properties": {
+        "hs_note_body": "Logged that the operators like the weekly report. No follow-up was promised.",
+        "hs_timestamp": "2026-10-12T12:00:00.000Z",
+        "seed_external_id": "co-commit-02-note-3",
+        "seed_origin": "cs-agent-seed"
+      }
+    },
+    {
+      "id": "co-commit-02-note-4",
+      "object": "note",
+      "properties": {
+        "hs_note_body": "Filed the summary of the weekly status.",
+        "hs_timestamp": "2026-10-09T12:00:00.000Z",
+        "seed_external_id": "co-commit-02-note-4",
+        "seed_origin": "cs-agent-seed"
+      }
+    },
+    {
+      "id": "co-commit-02-note-5",
+      "object": "note",
+      "properties": {
+        "hs_note_body": "Logged a check-in about onboarding progress.",
+        "hs_timestamp": "2026-09-14T12:00:00.000Z",
+        "seed_external_id": "co-commit-02-note-5",
+        "seed_origin": "cs-agent-seed"
+      }
+    },
+    {
+      "id": "co-commit-02-note-6",
+      "object": "note",
+      "properties": {
         "hs_note_body": "Confirmed the integration checklist is on track.",
         "hs_timestamp": "2026-07-27T12:00:00.000Z",
-        "seed_external_id": "co-commit-02-note-3",
+        "seed_external_id": "co-commit-02-note-6",
         "seed_origin": "cs-agent-seed"
       }
     }
@@ -4683,6 +4753,46 @@
     {
       "from": {
         "object": "company",
+        "id": "co-commit-01"
+      },
+      "to": {
+        "object": "note",
+        "id": "co-commit-01-note-4"
+      }
+    },
+    {
+      "from": {
+        "object": "company",
+        "id": "co-commit-01"
+      },
+      "to": {
+        "object": "note",
+        "id": "co-commit-01-note-5"
+      }
+    },
+    {
+      "from": {
+        "object": "company",
+        "id": "co-commit-01"
+      },
+      "to": {
+        "object": "note",
+        "id": "co-commit-01-note-6"
+      }
+    },
+    {
+      "from": {
+        "object": "company",
+        "id": "co-commit-01"
+      },
+      "to": {
+        "object": "note",
+        "id": "co-commit-01-note-7"
+      }
+    },
+    {
+      "from": {
+        "object": "company",
         "id": "co-commit-02"
       },
       "to": {
@@ -4748,6 +4858,36 @@
       "to": {
         "object": "note",
         "id": "co-commit-02-note-3"
+      }
+    },
+    {
+      "from": {
+        "object": "company",
+        "id": "co-commit-02"
+      },
+      "to": {
+        "object": "note",
+        "id": "co-commit-02-note-4"
+      }
+    },
+    {
+      "from": {
+        "object": "company",
+        "id": "co-commit-02"
+      },
+      "to": {
+        "object": "note",
+        "id": "co-commit-02-note-5"
+      }
+    },
+    {
+      "from": {
+        "object": "company",
+        "id": "co-commit-02"
+      },
+      "to": {
+        "object": "note",
+        "id": "co-commit-02-note-6"
       }
     }
   ],

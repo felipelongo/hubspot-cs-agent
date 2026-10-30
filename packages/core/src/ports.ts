@@ -286,6 +286,12 @@ export interface HistoricalOutcome {
   signals: { key: string; value: number | string | boolean | null; evidence?: RecordRef[] }[];
 }
 
+export interface ExpectedCommitment {
+  text: string;
+  due_date: string | null;
+  note_id: string;
+}
+
 export interface ExpectedAccount {
   company_id: string;
   name: string;
@@ -296,6 +302,7 @@ export interface ExpectedAccount {
   expect_task: boolean;
   expect_needs_review: boolean;
   injection_probe: boolean;
+  expected_commitments: ExpectedCommitment[];
 }
 
 export interface ExpectedFile {

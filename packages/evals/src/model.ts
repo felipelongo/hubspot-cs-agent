@@ -49,6 +49,7 @@ export interface PreparedModel {
   readonly tokens: ModelUsageTotals;
   readonly modelUsage: ModelUsageLine[];
   run(input: ModelRunInput): Promise<ModelOutcome>;
+  extractCommitments(input: ModelRunInput): Promise<unknown>;
 }
 
 /**
@@ -131,6 +132,24 @@ export async function prepareModel(mode: 'mock' | 'real'): Promise<PreparedModel
         escalation: outputEscalates(output),
         needsReview: outputNeedsReview(output) || generations.some((generation) => outputNeedsReview(generation)),
       };
+    },
+    async extractCommitments(input) {
+      generations.length = 0;
+      await (runProcedure as (args: unknown) => Promise<unknown>)({
+        procedureId: 'extract-commitments',
+        bundle: input.bundle,
+        signals: input.signals,
+        score: input.score,
+        llm,
+        hubspot: input.hubspot,
+        ledger,
+        policy: input.policy,
+        portal: input.portal,
+        runId: `eval-commitments-${input.bundle.company.ref.id}`,
+        clock: input.clock,
+        workflow: 'eval',
+      });
+      return generations.at(-1);
     },
   };
 }
