@@ -40,6 +40,7 @@ The same command ran the sweep again. `MockHubSpot.writeCount` did not increase.
 - Score **43 / at_risk**.
 - Reasons and citations: Paxton Sutter marked left (`contact:co-champion-01-contact-1`) and a bounced message (`email:co-champion-01-email-1`); 30 ready-to-give supporters unworked for 21 days (`company:co-champion-01`); last meaningful touch the 2026-09-20 account check-in, 40 days earlier (`meeting:co-champion-01-meeting-1`).
 - Proposals: `set_properties` auto, `create_task` auto, `log_note` auto, `draft_outreach` awaiting approval.
+- Owner-task and timeline-note keys include the band: `renewal-risk:company:co-champion-01:task:2026-W44:at_risk` and `renewal-risk:company:co-champion-01:note:2026-W44:at_risk`. The health-property key is `renewal-risk:company:co-champion-01:set_properties:2026-W44:43:at_risk`.
 - The draft is addressed to Quilla Thorne and mentions the 30 waiting supporters.
 
 ## Backtest
