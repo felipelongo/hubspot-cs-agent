@@ -25,6 +25,8 @@ export interface WorkflowInput {
   mode: RunMode;
   accountId?: string;
   limit?: number;
+  /** When set, the run is stored under this id. Callers that answer before the sweep finishes can publish it. */
+  runId?: string;
   hubspot: HubSpotPort;
   llm: LlmPort;
   ledger: LedgerPort;
@@ -57,7 +59,7 @@ const PROCEDURE_WORKFLOW: Record<WorkflowName, string> = {
 };
 
 export async function runWorkflow(input: WorkflowInput): Promise<WorkflowResult> {
-  const runId = randomUUID();
+  const runId = input.runId ?? randomUUID();
   const counts: Counts = { accounts: 0, proposals: 0, committed: 0, replayed: 0, awaiting: 0 };
   await input.ledger.startRun({
     id: runId,

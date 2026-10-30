@@ -140,6 +140,7 @@ function memoryLedger(blocked: string[] = []) {
     listRuns: async () => [],
     getRun: async () => null,
     runCost: async () => 0,
+    claimWebhookDedupe: async () => false,
   };
   return { ledger, inserted, calls, proposals };
 }

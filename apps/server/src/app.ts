@@ -1,7 +1,7 @@
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { Hono, type Context } from 'hono';
 import { serve } from '@hono/node-server';
-import type { Clock, HubSpotPort, LedgerPort, PolicyFile, ProposedAction, RunMode } from '@cs-agent/core';
+import type { Clock, HubSpotPort, LedgerPort, LlmPort, PolicyFile, ProposedAction, RunMode, ScoringRules } from '@cs-agent/core';
 import type { PortalConfig } from '@cs-agent/config';
 import { decideApproval, editProposal } from '@cs-agent/approvals';
 import { SESSION_COOKIE, cookieMatches, safeEqual, sessionToken } from './auth.js';
@@ -19,7 +19,7 @@ import {
   type QueueGroup,
 } from './pages.js';
 import { loadProposals } from './read.js';
-import { webhookResponse } from './webhook.js';
+import { acceptHubSpotWebhook } from './webhook.js';
 
 export interface AppDeps {
   ledger: LedgerPort;
@@ -28,6 +28,11 @@ export interface AppDeps {
   policy: PolicyFile;
   clock: Clock;
   password: string;
+  llm?: LlmPort;
+  rules?: ScoringRules;
+  /** When true, POST /webhooks/hubspot waits until queued sweeps finish. */
+  awaitSweeps?: boolean;
+  env?: NodeJS.ProcessEnv;
 }
 
 const APPROVER = 'console';
@@ -217,15 +222,38 @@ export function createApp(deps: AppDeps): Hono {
 
   app.post('/webhooks/hubspot', async (c) => {
     const body = await c.req.text();
-    return webhookResponse({
-      method: c.req.method,
-      url: c.req.url,
-      body,
-      timestamp: c.req.header('x-hubspot-request-timestamp'),
-      signature: c.req.header('x-hubspot-signature-v3'),
-      secret: process.env.HUBSPOT_WEBHOOK_SECRET,
-      now: deps.clock.now(),
-    });
+    const env = deps.env ?? process.env;
+    const { response, settled } = await acceptHubSpotWebhook(
+      {
+        method: c.req.method,
+        url: c.req.url,
+        body,
+        timestamp: c.req.header('x-hubspot-request-timestamp'),
+        signature: c.req.header('x-hubspot-signature-v3'),
+        secret: env.HUBSPOT_WEBHOOK_SECRET,
+        now: deps.clock.now(),
+      },
+      {
+        hubspot: deps.hubspot,
+        ledger: deps.ledger,
+        portal: deps.portal,
+        policy: deps.policy,
+        clock: deps.clock,
+        llm: deps.llm,
+        rules: deps.rules,
+        env,
+        awaitSweeps: deps.awaitSweeps,
+      },
+    );
+    if (!deps.awaitSweeps) {
+      void settled.then(
+        () => undefined,
+        (error: unknown) => {
+          console.error(error instanceof Error ? error.message : error);
+        },
+      );
+    }
+    return response;
   });
 
   app.notFound((c) => c.html(notFoundDocument(), 404));

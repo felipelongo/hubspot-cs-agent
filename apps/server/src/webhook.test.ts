@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { verifyHubSpotV3, webhookResponse } from './webhook.js';
+import { sweepMode, verifyHubSpotV3, webhookResponse } from './webhook.js';
 
 const secret = 'top-secret';
 const method = 'POST';
@@ -10,6 +10,13 @@ const signature = 'rH9UjqMLHyTQrUtmys6Au0nPfvOgjEL3Yq+r8sXfIpM=';
 const now = new Date(Number(timestamp));
 
 describe('HubSpot v3 signatures', () => {
+  it('defaults the sweep to shadow and never treats an unknown mode as live', () => {
+    expect(sweepMode({})).toBe('shadow');
+    expect(sweepMode({ MODE: 'live' })).toBe('live');
+    expect(sweepMode({ MODE: 'dry_run' })).toBe('dry_run');
+    expect(sweepMode({ MODE: 'production' })).toBe('shadow');
+  });
+
   it('accepts a known secret and body', () => {
     expect(verifyHubSpotV3({ method, url, body, timestamp, signature, secret, now })).toEqual({ ok: true });
   });
@@ -30,7 +37,7 @@ describe('HubSpot v3 signatures', () => {
     expect(response.status).toBe(401);
     const accepted = webhookResponse({ method, url, body, timestamp, signature, secret, now });
     expect(accepted.status).toBe(202);
-    const payload = (await accepted.json()) as { note: string };
-    expect(payload.note).toContain('single-account sweep');
+    const payload = (await accepted.json()) as { ok: boolean };
+    expect(payload.ok).toBe(true);
   });
 });

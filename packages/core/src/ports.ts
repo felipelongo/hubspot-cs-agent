@@ -242,6 +242,20 @@ export interface LedgerPort {
    * 0 when the run logged no calls. Null when any call has no configured price.
    */
   runCost(runId: string): Promise<number | null>;
+  /**
+   * Record a webhook dedupe key. Returns true when this caller owns it.
+   * A null window never replaces an existing key. A window replaces it once the row is at least that old.
+   */
+  claimWebhookDedupe(input: WebhookDedupeClaim): Promise<boolean>;
+}
+
+export interface WebhookDedupeClaim {
+  key: string;
+  kind: 'event' | 'account';
+  accountId: string | null;
+  runId: string | null;
+  seenAt: string;
+  windowMs: number | null;
 }
 
 export interface ApprovalRequest {

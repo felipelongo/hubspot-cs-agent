@@ -158,7 +158,7 @@ CRON_TZ=America/New_York
 0 7 * * 1-5 cd /path/to/cs-agent && pnpm cs sweep renewal-risk-sweep --mode live
 ```
 
-Hosted deployment is future work. Vercel, for example, needs a hosted Postgres instead of the default local PGlite file (`data/pglite`), which would not persist there. The console's `POST /webhooks/hubspot` checks the v3 signature (`X-HubSpot-Signature-v3`, timestamp within 5 minutes) and answers 202. Wiring that stub to a single-account sweep is the next step, not this demo.
+Hosted deployment is future work. Vercel, for example, needs a hosted Postgres instead of the default local PGlite file (`data/pglite`), which would not persist there. The console's `POST /webhooks/hubspot` checks the v3 signature (`X-HubSpot-Signature-v3`, timestamp within 5 minutes), answers 202, and then starts one renewal-risk sweep per affected company in the mode set by `MODE` (shadow when unset). Company events name the company directly; contact and deal events follow their company association; other object types are ignored and listed in the response. Duplicate event ids and repeat events for the same company within `WEBHOOK_DEDUPE_WINDOW_MS` (default 15 minutes) are deduped in the ledger. No webhook subscription is registered by this repo; see `apps/server/README.md`.
 
 ## Next
 

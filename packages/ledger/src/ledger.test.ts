@@ -160,7 +160,7 @@ describe('ledger', () => {
     await withSql(async (ledger, sql) => {
       await ledger.migrate();
       const rows = await sql.query<{ filename: string }>('SELECT filename FROM schema_migrations ORDER BY filename');
-      expect(rows.map((row) => row.filename)).toEqual(['001_init.sql', '002_llm_cost_nullable.sql']);
+      expect(rows.map((row) => row.filename)).toEqual(['001_init.sql', '002_llm_cost_nullable.sql', '003_webhook_dedupe.sql']);
     });
   });
 
@@ -204,6 +204,38 @@ describe('ledger', () => {
         cost_usd: null,
       });
       expect((await ledger.getRun('run-unknown'))?.cost_usd).toBeNull();
+    });
+  });
+
+  it('claims an event once and refreshes an account key after the window', async () => {
+    await withSql(async (ledger) => {
+      const seen = '2026-10-30T12:00:00.000Z';
+      const event = {
+        key: 'event:1',
+        kind: 'event' as const,
+        accountId: null,
+        runId: null,
+        seenAt: seen,
+        windowMs: null,
+      };
+      expect(await ledger.claimWebhookDedupe(event)).toBe(true);
+      expect(await ledger.claimWebhookDedupe({ ...event, seenAt: '2026-10-30T13:00:00.000Z' })).toBe(false);
+
+      const account = {
+        key: 'account:co-1',
+        kind: 'account' as const,
+        accountId: 'co-1',
+        runId: 'run-1',
+        seenAt: seen,
+        windowMs: 60_000,
+      };
+      expect(await ledger.claimWebhookDedupe(account)).toBe(true);
+      expect(
+        await ledger.claimWebhookDedupe({ ...account, runId: 'run-2', seenAt: '2026-10-30T12:00:30.000Z' }),
+      ).toBe(false);
+      expect(
+        await ledger.claimWebhookDedupe({ ...account, runId: 'run-3', seenAt: '2026-10-30T12:01:00.000Z' }),
+      ).toBe(true);
     });
   });
 
