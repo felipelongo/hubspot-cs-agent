@@ -499,6 +499,107 @@ describe('seedHubSpot when the token lacks the email scope', () => {
   });
 });
 
+const INDUSTRY_OPTIONS = [
+  { label: 'Hospitality', value: 'HOSPITALITY' },
+  { label: 'Retail', value: 'RETAIL' },
+  { label: 'Construction', value: 'CONSTRUCTION' },
+  { label: 'Industrial automation', value: 'INDUSTRIAL_AUTOMATION' },
+  { label: 'Commercial printing', value: 'PRINTING_COMMERCIAL' },
+  { label: 'Food & Beverages', value: 'FOOD_BEVERAGES' },
+];
+
+describe('seedHubSpot enumeration options', () => {
+  it('maps fixture values onto HubSpot options and parks unmatched text on seed_industry', async () => {
+    const hubspot = new IndustryPortal();
+    const source = strictDatabase();
+    source.companies = [
+      company('co-hospitality', 'Hospitality'),
+      company('co-retail', 'retail'),
+      company('co-automation', 'Industrial automation'),
+      company('co-printing', 'Commercial printing'),
+      company('co-construction', 'Construction'),
+      company('co-exact', 'HOSPITALITY'),
+      company('co-logistics', 'Logistics'),
+      company('co-food', 'Food and beverage'),
+      company('co-health', 'Healthcare technology'),
+    ];
+
+    const summary = await seedHubSpot(hubspot, portal, source);
+    const companies = new Map(hubspot.recordsOf('company').map((record) => [record.properties.seed_external_id, record.properties]));
+
+    expect(companies.get('co-hospitality')).toMatchObject({ industry: 'HOSPITALITY' });
+    expect(companies.get('co-hospitality')?.seed_industry).toBeUndefined();
+    expect(companies.get('co-retail')).toMatchObject({ industry: 'RETAIL' });
+    expect(companies.get('co-automation')).toMatchObject({ industry: 'INDUSTRIAL_AUTOMATION' });
+    expect(companies.get('co-printing')).toMatchObject({ industry: 'PRINTING_COMMERCIAL' });
+    expect(companies.get('co-construction')).toMatchObject({ industry: 'CONSTRUCTION' });
+    expect(companies.get('co-exact')).toMatchObject({ industry: 'HOSPITALITY' });
+    expect(companies.get('co-exact')?.seed_industry).toBeUndefined();
+    for (const [id, text] of [
+      ['co-logistics', 'Logistics'],
+      ['co-food', 'Food and beverage'],
+      ['co-health', 'Healthcare technology'],
+    ] as const) {
+      expect(companies.get(id)?.industry).toBeUndefined();
+      expect(companies.get(id)?.seed_industry).toBe(text);
+    }
+    expect(companies.get('co-hospitality')?.hubspot_owner_id).toBe('token-user');
+    expect(companies.get('co-hospitality')?.seed_hubspot_owner_id).toBeUndefined();
+    expect(hubspot.recordsOf('contact')[0]?.properties.cs_left_company).toBe('true');
+    expect(hubspot.recordsOf('contact')[0]?.properties.seed_cs_left_company).toBeUndefined();
+    expect(hubspot.recordsOf('deal')[0]?.properties.pipeline).toBe('pipe-9');
+    expect(hubspot.recordsOf('deal')[0]?.properties.dealstage).toBe('stg-0');
+    expect(hubspot.recordsOf('deal')[0]?.properties.seed_pipeline).toBeUndefined();
+    expect(hubspot.recordsOf('deal')[0]?.properties.seed_dealstage).toBeUndefined();
+    expect(hubspot.recordsOf('ticket')[0]?.properties.hs_pipeline).toBe('0');
+    expect(hubspot.recordsOf('ticket')[0]?.properties.hs_pipeline_stage).toBe('1');
+    expect(createdProp(hubspot, 'company', 'seed_industry')).toMatchObject({
+      type: 'string',
+      fieldType: 'text',
+      groupName: 'cs_agent',
+    });
+    expect(hubspot.createdProperties.filter((item) => item.property.name === 'seed_industry')).toHaveLength(1);
+    expect(summary).toContain('Enum values: 5 mapped to HubSpot options, 3 kept in seed_industry.');
+
+    const created = hubspot.createdProperties.length;
+    const groups = hubspot.groupCreates;
+    const again = await seedHubSpot(hubspot, portal, source);
+
+    expect(again).toContain('Properties created 0.');
+    expect(hubspot.createdProperties).toHaveLength(created);
+    expect(hubspot.groupCreates).toBe(groups);
+    expect(hubspot.createdProperties.filter((item) => item.property.name === 'seed_industry')).toHaveLength(1);
+  });
+
+  it('leaves free-text industry unchanged when the portal defines no enumerations', async () => {
+    const source = database();
+    source.companies[0].properties.industry = 'Hospitality';
+    source.companies[1].properties.industry = 'Logistics';
+    const hubspot = new MockHubSpot(source);
+
+    const summary = await seedHubSpot(hubspot, portal, source);
+
+    expect((await hubspot.getRecord({ object: 'company', id: 'co-avery' }))?.properties.industry).toBe('Hospitality');
+    expect((await hubspot.getRecord({ object: 'company', id: 'co-blake' }))?.properties.industry).toBe('Logistics');
+    expect((await hubspot.getRecord({ object: 'company', id: 'co-avery' }))?.properties.seed_industry).toBeUndefined();
+    expect(summary).not.toContain('Enum values:');
+  });
+});
+
+function company(id: string, industry: string): SeedDatabase['companies'][number] {
+  return {
+    id,
+    properties: {
+      name: id,
+      hubspot_owner_id: 'owner-avery',
+      industry,
+      seed_external_id: id,
+      seed_csm: 'Avery Quinn',
+      seed_origin: 'cs-agent-seed',
+    },
+  };
+}
+
 function createdProp(hubspot: StrictPortal, object: ObjectType, name: string): PropertyDefinition | undefined {
   return hubspot.createdProperties.find((item) => item.object === object && item.property.name === name)?.property;
 }
@@ -694,9 +795,13 @@ class StrictPortal implements HubSpotPort {
     return { pipelineId: pipeline.id, created: true, missingStages: [] };
   }
 
+  protected define(object: ObjectType, property: PropertyDefinition): void {
+    this.properties.set(`${object}:${property.name}`, property);
+  }
+
   private standard(object: ObjectType, names: string[]): void {
     for (const name of names) {
-      this.properties.set(`${object}:${name}`, {
+      this.define(object, {
         name,
         label: name,
         type: 'string',
@@ -797,5 +902,88 @@ class ScopeDeniedPortal extends StrictPortal {
       (this.mode === 'create' && phase === 'create') ||
       (this.mode === 'records' && phase === 'records');
     if (denied) throw new HubSpotApiError(403, { message: 'missing scope' });
+  }
+}
+
+/** Company industry is an enumeration, and upsert rejects any other option value. */
+class IndustryPortal extends StrictPortal {
+  private readonly industryValues = new Set(INDUSTRY_OPTIONS.map((option) => option.value));
+
+  constructor() {
+    super();
+    this.define('company', {
+      name: 'industry',
+      label: 'Industry',
+      type: 'enumeration',
+      fieldType: 'select',
+      groupName: 'companyinformation',
+      options: INDUSTRY_OPTIONS.map((option) => ({ ...option })),
+    });
+    this.define('company', {
+      name: 'hubspot_owner_id',
+      label: 'Company owner',
+      type: 'enumeration',
+      fieldType: 'select',
+      groupName: 'companyinformation',
+      options: [{ label: 'Other', value: '999' }],
+    });
+    this.define('contact', {
+      name: 'cs_left_company',
+      label: 'Left company',
+      type: 'enumeration',
+      fieldType: 'booleancheckbox',
+      groupName: 'contactinformation',
+      options: [
+        { label: 'Yes', value: 'yes' },
+        { label: 'No', value: 'no' },
+      ],
+    });
+    this.define('deal', {
+      name: 'pipeline',
+      label: 'Pipeline',
+      type: 'enumeration',
+      fieldType: 'select',
+      groupName: 'dealinformation',
+      options: [{ label: 'Sales', value: 'default' }],
+    });
+    this.define('deal', {
+      name: 'dealstage',
+      label: 'Deal stage',
+      type: 'enumeration',
+      fieldType: 'radio',
+      groupName: 'dealinformation',
+      options: [{ label: 'Closed won', value: 'closedwon' }],
+    });
+    this.define('ticket', {
+      name: 'hs_pipeline',
+      label: 'Ticket pipeline',
+      type: 'enumeration',
+      fieldType: 'select',
+      groupName: 'ticketinformation',
+      options: [{ label: 'Support', value: 'support' }],
+    });
+    this.define('ticket', {
+      name: 'hs_pipeline_stage',
+      label: 'Ticket stage',
+      type: 'enumeration',
+      fieldType: 'select',
+      groupName: 'ticketinformation',
+      options: [{ label: 'New', value: 'new' }],
+    });
+  }
+
+  override async batchUpsert(object: ObjectType, rows: UpsertInput[]): Promise<CrmRecord[]> {
+    if (object === 'company') {
+      for (const row of rows) {
+        const industry = row.properties.industry;
+        if (industry !== undefined && !this.industryValues.has(industry)) {
+          throw new HubSpotApiError(400, {
+            category: 'VALIDATION_ERROR',
+            message: `${industry} was not one of the allowed options: [${[...this.industryValues].join(', ')}]`,
+          });
+        }
+      }
+    }
+    return super.batchUpsert(object, rows);
   }
 }

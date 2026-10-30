@@ -5,6 +5,14 @@ const GROUP = 'cs_agent';
 const ID_PROPERTY = 'seed_external_id';
 const UNIQUE_OBJECTS = new Set<ObjectType>(['company', 'contact', 'deal', 'ticket']);
 const ENGAGEMENTS = new Set<ObjectType>(['note', 'email', 'meeting', 'call']);
+/** Seed rewrites these itself. Their fixture text is not a HubSpot option value. */
+const REWRITTEN_PROPERTIES = new Set([
+  'hubspot_owner_id',
+  'pipeline',
+  'dealstage',
+  'hs_pipeline',
+  'hs_pipeline_stage',
+]);
 
 const BOOLEAN_OPTIONS = [
   { label: 'true', value: 'true' },
@@ -24,7 +32,7 @@ export function isHubSpotForbidden(error: unknown): boolean {
 export async function ensureSeedProperties(
   hubspot: HubSpotPort,
   database: SeedDatabase,
-): Promise<{ created: number; emailsSkipped: boolean }> {
+): Promise<{ created: number; emailsSkipped: boolean; listed: Partial<Record<ObjectType, PropertyDefinition[]>> }> {
   const groups: [ObjectType, { properties: Record<string, string> }[]][] = [
     ['company', database.companies],
     ['contact', database.contacts],
@@ -37,9 +45,12 @@ export async function ensureSeedProperties(
   ];
   let created = 0;
   let emailsSkipped = false;
+  const listed: Partial<Record<ObjectType, PropertyDefinition[]>> = {};
   for (const [object, rows] of groups) {
     try {
-      created += await ensureObject(hubspot, object, rows);
+      const result = await ensureObject(hubspot, object, rows);
+      created += result.created;
+      listed[object] = result.listed;
     } catch (error) {
       if (object === 'email' && isHubSpotForbidden(error)) {
         emailsSkipped = true;
@@ -48,14 +59,14 @@ export async function ensureSeedProperties(
       throw error;
     }
   }
-  return { created, emailsSkipped };
+  return { created, emailsSkipped, listed };
 }
 
 async function ensureObject(
   hubspot: HubSpotPort,
   object: ObjectType,
   rows: { properties: Record<string, string> }[],
-): Promise<number> {
+): Promise<{ created: number; listed: PropertyDefinition[] }> {
   const samples = new Map<string, string[]>();
   for (const row of rows) {
     for (const [name, value] of Object.entries(row.properties)) {
@@ -64,18 +75,19 @@ async function ensureObject(
       else samples.set(name, [value]);
     }
   }
-  if (samples.size === 0) return 0;
-  const existing = new Set((await hubspot.listProperties(object)).map((property) => property.name));
+  if (samples.size === 0) return { created: 0, listed: [] };
+  const listed = await hubspot.listProperties(object);
+  const existing = new Set(listed.map((property) => property.name));
   // hs_* names are HubSpot-defined. Never create them, even when a list response omits one.
   const missing = [...samples.keys()].filter((name) => !existing.has(name) && !name.startsWith('hs_'));
-  if (missing.length === 0) return 0;
+  if (missing.length === 0) return { created: 0, listed };
   await hubspot.createPropertyGroup(object, { name: GROUP, label: 'CS agent' });
   let created = 0;
   for (const name of missing) {
     const result = await createSeedProperty(hubspot, object, definitionFor(object, name, samples.get(name) ?? []));
     if (result.created) created += 1;
   }
-  return created;
+  return { created, listed };
 }
 
 async function createSeedProperty(
@@ -135,4 +147,80 @@ function isNumberValue(value: string): boolean {
 
 function isIsoDateTime(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value);
+}
+
+export interface EnumAlignment<T> {
+  rows: T[];
+  mapped: number;
+  kept: Map<string, number>;
+  created: number;
+}
+
+/**
+ * Fixture text on an existing enumeration is sent as the option value when it
+ * matches an option value or label after normalizing non-alphanumerics to `_`.
+ * Anything else is stored on `seed_<property>` and the enum is omitted.
+ * Boolean checkboxes and properties seed rewrites itself are left alone.
+ * `listed` is the property list ensure already fetched, before it creates properties.
+ */
+export async function alignEnumerationValues<T extends { properties: Record<string, string> }>(
+  hubspot: HubSpotPort,
+  object: ObjectType,
+  rows: T[],
+  listed: PropertyDefinition[],
+): Promise<EnumAlignment<T>> {
+  const byName = new Map(listed.map((property) => [property.name, property]));
+  let mapped = 0;
+  const kept = new Map<string, number>();
+  const needed = new Set<string>();
+  const rewritten = rows.map((row) => {
+    let properties: Record<string, string> | undefined;
+    for (const [name, value] of Object.entries(row.properties)) {
+      if (REWRITTEN_PROPERTIES.has(name)) continue;
+      const definition = byName.get(name);
+      if (!definition || definition.type !== 'enumeration' || definition.fieldType === 'booleancheckbox') continue;
+      const options = definition.options ?? [];
+      if (options.some((option) => option.value === value)) continue;
+      const token = enumToken(value);
+      const match = token
+        ? (options.find((option) => enumToken(option.value) === token) ??
+          options.find((option) => enumToken(option.label) === token))
+        : undefined;
+      properties ??= { ...row.properties };
+      if (match) {
+        properties[name] = match.value;
+        mapped += 1;
+        continue;
+      }
+      const custom = `seed_${name}`;
+      properties[custom] = value;
+      delete properties[name];
+      kept.set(custom, (kept.get(custom) ?? 0) + 1);
+      needed.add(custom);
+    }
+    return properties ? { ...row, properties } : row;
+  });
+
+  let created = 0;
+  for (const name of needed) {
+    if (byName.has(name)) continue;
+    await hubspot.createPropertyGroup(object, { name: GROUP, label: 'CS agent' });
+    const result = await createSeedProperty(hubspot, object, {
+      name,
+      label: labelFor(name),
+      groupName: GROUP,
+      type: 'string',
+      fieldType: 'text',
+    });
+    if (result.created) created += 1;
+  }
+  return { rows: rewritten, mapped, kept, created };
+}
+
+function enumToken(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
 }

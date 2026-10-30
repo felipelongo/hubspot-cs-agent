@@ -1,6 +1,15 @@
-import type { CrmRecord, HubSpotPort, ObjectType, Pipeline, RecordRef, SeedDatabase, UpsertInput } from '@cs-agent/core';
+import type {
+  CrmRecord,
+  HubSpotPort,
+  ObjectType,
+  Pipeline,
+  PropertyDefinition,
+  RecordRef,
+  SeedDatabase,
+  UpsertInput,
+} from '@cs-agent/core';
 import type { PortalConfig } from '@cs-agent/config';
-import { ensureSeedProperties, isHubSpotForbidden } from './seed-properties.js';
+import { alignEnumerationValues, ensureSeedProperties, isHubSpotForbidden } from './seed-properties.js';
 import { setupPortal } from './services.js';
 
 const SEEDED_OBJECTS: ObjectType[] = ['company', 'contact', 'deal', 'ticket', 'note', 'email', 'meeting', 'call', 'task'];
@@ -15,33 +24,62 @@ export async function seedHubSpot(hubspot: HubSpotPort, portal: PortalConfig, da
   const setup = await setupPortal(hubspot, portal);
   const properties = await ensureSeedProperties(hubspot, database);
   let emailsSkipped = properties.emailsSkipped;
+  const stats = { created: properties.created, mapped: 0, kept: new Map<string, number>() };
   const renewal = await ensureRenewalPipeline(hubspot, portal);
   const ids = new Map<string, string>();
-  const companies = await upsert(hubspot, 'company', rewriteOwnerIds(database.companies, mapped.ids), ids);
-  const contacts = await upsert(hubspot, 'contact', rewriteOwnerIds(database.contacts, mapped.ids), ids);
+  const companies = await upsert(
+    hubspot,
+    'company',
+    await prepareRows(hubspot, 'company', rewriteOwnerIds(database.companies, mapped.ids), properties.listed.company, stats),
+    ids,
+  );
+  const contacts = await upsert(
+    hubspot,
+    'contact',
+    await prepareRows(hubspot, 'contact', rewriteOwnerIds(database.contacts, mapped.ids), properties.listed.contact, stats),
+    ids,
+  );
   const deals = await upsert(
     hubspot,
     'deal',
-    rewriteDeals(rewriteOwnerIds(database.deals, mapped.ids), renewal.pipeline),
+    await prepareRows(
+      hubspot,
+      'deal',
+      rewriteDeals(rewriteOwnerIds(database.deals, mapped.ids), renewal.pipeline),
+      properties.listed.deal,
+      stats,
+    ),
     ids,
   );
   const tickets = await upsert(
     hubspot,
     'ticket',
-    await rewriteTickets(hubspot, rewriteOwnerIds(database.tickets, mapped.ids)),
+    await prepareRows(
+      hubspot,
+      'ticket',
+      await rewriteTickets(hubspot, rewriteOwnerIds(database.tickets, mapped.ids)),
+      properties.listed.ticket,
+      stats,
+    ),
     ids,
   );
   const activityCounts: Record<string, number> = {};
   for (const object of ACTIVITY_OBJECTS) {
-    const rows = rewriteOwnerIds(
-      database.activities.filter((activity) => activity.object === object),
-      mapped.ids,
-    );
     if (object === 'email' && emailsSkipped) {
       activityCounts[object] = 0;
       continue;
     }
     try {
+      const rows = await prepareRows(
+        hubspot,
+        object,
+        rewriteOwnerIds(
+          database.activities.filter((activity) => activity.object === object),
+          mapped.ids,
+        ),
+        properties.listed[object],
+        stats,
+      );
       const written = await writeActivities(hubspot, object, rows, ids);
       activityCounts[object] = written.length;
     } catch (error) {
@@ -63,10 +101,12 @@ export async function seedHubSpot(hubspot: HubSpotPort, portal: PortalConfig, da
   const lines = [
     `Setup created ${setup.created.length}, unchanged ${setup.unchanged.length}, findings ${setup.findings.length}.`,
     ...setup.findings.map((finding) => `  finding: ${finding}`),
-    `Properties created ${properties.created}. Pipeline ${renewal.created ? 'created' : 'unchanged'}.`,
+    `Properties created ${stats.created}. Pipeline ${renewal.created ? 'created' : 'unchanged'}.`,
     `Owners: ${mapped.matched} matched by email, ${mapped.fallback} fell back to the token's user.`,
     `Upserted companies ${companies.length}, contacts ${contacts.length}, deals ${deals.length}, tickets ${tickets.length}, activities ${activityTotal}.`,
   ];
+  const enums = enumSummary(stats.mapped, stats.kept);
+  if (enums) lines.push(enums);
   if (emailsSkipped) {
     const skipped = database.activities.filter((activity) => activity.object === 'email').length - (activityCounts.email ?? 0);
     lines.push(`Skipped emails (${skipped}): token lacks the email scope (sales-email-read). Add it and re-run seed.`);
@@ -95,6 +135,30 @@ export async function resetSeed(hubspot: HubSpotPort): Promise<string> {
   }
   lines.push(`Archived ${total} records with ${ID_PROPERTY}.`);
   return lines.join('\n');
+}
+
+async function prepareRows<T extends { properties: Record<string, string> }>(
+  hubspot: HubSpotPort,
+  object: ObjectType,
+  rows: T[],
+  listed: PropertyDefinition[] | undefined,
+  stats: { created: number; mapped: number; kept: Map<string, number> },
+): Promise<T[]> {
+  const aligned = await alignEnumerationValues(hubspot, object, rows, listed ?? []);
+  stats.created += aligned.created;
+  stats.mapped += aligned.mapped;
+  for (const [name, count] of aligned.kept) stats.kept.set(name, (stats.kept.get(name) ?? 0) + count);
+  return aligned.rows;
+}
+
+function enumSummary(mapped: number, kept: Map<string, number>): string | undefined {
+  const parts: string[] = [];
+  if (mapped > 0) parts.push(`${mapped} mapped to HubSpot options`);
+  for (const [name, count] of kept) {
+    if (count > 0) parts.push(`${count} kept in ${name}`);
+  }
+  if (parts.length === 0) return undefined;
+  return `Enum values: ${parts.join(', ')}.`;
 }
 
 async function upsert(
