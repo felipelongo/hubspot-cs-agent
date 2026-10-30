@@ -1,10 +1,10 @@
 # CS agent, one page
 
-Customer success teams lose renewals in the gaps: nobody noticed the champion left, the tickets piled up, or the renewal is two weeks away with no meeting booked. This agent watches those accounts in HubSpot and does the next safe step itself.
+Customer success teams lose renewals in the gaps: nobody noticed the champion left, the tickets piled up, or the renewal is two weeks away with no meeting booked. This agent reads those accounts in HubSpot and does the next safe step itself.
 
 ## What it does
 
-Each weekday it looks at accounts whose renewal is coming up. It writes a health score on the company, with the reasons and the HubSpot records those reasons came from. When the account is at risk it creates a task for the owner. When a customer email should go out, it drafts the email and waits. A person approves the exact draft. The agent never sends email.
+When you run the renewal sweep, it looks at accounts whose renewal is coming up. It writes a health score on the company, with the reasons and the HubSpot records those reasons came from. When the account is at risk it creates a task for the owner. When a customer email should go out, it drafts the email and waits. A person approves the exact draft. The agent never sends email.
 
 Critical accounts, and large at-risk accounts, are handed to the CS lead as well.
 
