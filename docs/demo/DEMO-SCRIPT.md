@@ -4,6 +4,14 @@ Record the mock demo. It does not need a HubSpot token. Say the times out loud a
 
 Console shots for this cut are in `docs/demo/screenshots/`. HubSpot shots wait on a token; the checklist lists them.
 
+## Before you record
+
+Use Node 22 or newer (`package.json` engines). Install with `pnpm i`.
+
+`pnpm demo:mock` needs no API keys. It prints `Accounts`, `Committed`, `Awaiting`, and `Second sweep created no new HubSpot writes.` It resets the local ledger in `data/pglite`, so run it right before recording.
+
+Then `pnpm cs serve` and open http://localhost:8787. That is the default port; `--port` overrides it. Sign in with `demo` unless `CONSOLE_PASSWORD` is set.
+
 ## 3 minutes
 
 | Time | On screen | Voiceover |
@@ -14,7 +22,7 @@ Console shots for this cut are in `docs/demo/screenshots/`. HubSpot shots wait o
 | 1:05–1:35 | `docs/demo/screenshots/02-queue.png`, then `03-proposal.png`. Point at the band, the citations (`hubspot:ticket:...`), the action hash, and Approve. | Here is Fathom Rye, scored critical. Every reason names a record. The hash is the exact change a person would be approving. Edit the payload and that hash is void. The old proposal is marked superseded. |
 | 1:35–1:55 | `04-runs.png`. Point at the second row of commits: 0. | We ran it again. Same week, same accounts. HubSpot writes: zero. The duplicate key is the meaning of the action, not a random id. |
 | 1:55–2:15 | `06-audit.png` and `07-metrics.png`. Read the 25-minute assumption out loud. | Every transition is in an append-only log. The metrics page states its assumption: 25 minutes saved per at-risk account, for a health review and a note. The number is an estimate, not a case study. |
-| 2:15–2:40 | `procedures/assess-account-risk/assess-account-risk.md` and `procedures.lock.json`. | A new playbook is a markdown file. It has a version. A test fails if the text changes without a version bump. The proposal stores `procedure@version` and a hash of the prompt, so you can see which instructions produced which action. |
+| 2:15–2:40 | `procedures/assess-account-risk/assess-account-risk.md` and `procedures/procedures.lock.json`. | A new playbook is a markdown file. It has a version. A test fails if the text changes without a version bump. The proposal stores `procedure@version` and a hash of the prompt, so you can see which instructions produced which action. |
 | 2:40–3:00 | `config/portal.yaml`, then the one-pager line. | Their object names live in a file, not in the code. Connecting the next portal is configuration. Day 1 is configuration, not construction. |
 
 ## 60 seconds
