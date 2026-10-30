@@ -11,7 +11,7 @@ export function frozenClock(iso: string): Clock {
   return { now: () => new Date(time) };
 }
 
-/** ISO week, used as the idempotency period so a re-run the same week is a no-op. */
+/** ISO week. Owner tasks and timeline notes append the health band to this period. */
 export function isoWeekPeriod(date: Date): string {
   const utc = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   const day = utc.getUTCDay() || 7;

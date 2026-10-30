@@ -93,7 +93,7 @@ function assessAccount(
 ): BuiltProposal[] {
   const companyId = shared.bundle.company.ref.id;
   const names = input.portal.properties.company;
-  const propertiesKey = idempotencyKey(shared, companyId, 'set_properties');
+  const propertiesKey = idempotencyKey(shared, companyId, 'set_properties', `${input.score.score}:${input.score.band}`);
   const proposals: BuiltProposal[] = [
     sealed({
       kind: 'set_properties',
@@ -113,7 +113,7 @@ function assessAccount(
     }),
   ];
 
-  const noteKey = idempotencyKey(shared, companyId, 'note');
+  const noteKey = idempotencyKey(shared, companyId, 'note', input.score.band);
   proposals.push(
     sealed({
       kind: 'log_note',
@@ -133,7 +133,7 @@ function assessAccount(
 }
 
 function reviewTask(shared: Shared, band: string): BuiltProposal {
-  const key = idempotencyKey(shared, shared.bundle.company.ref.id, 'task');
+  const key = idempotencyKey(shared, shared.bundle.company.ref.id, 'task', band);
   // The id is inside the body, so it is chosen before the hash.
   const id = randomUUID();
   const payload = {
@@ -302,13 +302,13 @@ function sealed(input: {
   };
 }
 
-function idempotencyKey(shared: Shared, companyId: string, action: string): string {
+function idempotencyKey(shared: Shared, companyId: string, action: string, suffix?: string): string {
   return buildIdempotencyKey({
     workflow: shared.workflow,
     object: 'company',
     id: companyId,
     action,
-    period: shared.period,
+    period: suffix ? `${shared.period}:${suffix}` : shared.period,
   });
 }
 

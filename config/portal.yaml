@@ -18,6 +18,7 @@ renewal_pipeline:
 
 activity_window_days: 120
 renewal_window_days: 180
+# ISO week, plus the health band on owner tasks and timeline notes.
 idempotency_period: iso_week
 
 cs_lead:

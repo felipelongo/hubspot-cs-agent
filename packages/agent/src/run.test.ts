@@ -220,7 +220,25 @@ describe('runProcedure', () => {
         object: 'company',
         id: 'co-northwind',
         action: 'set_properties',
-        period,
+        period: `${period}:72:watch`,
+      }),
+    );
+    expect(note?.idempotency_key).toBe(
+      buildIdempotencyKey({
+        workflow: 'renewal-risk',
+        object: 'company',
+        id: 'co-northwind',
+        action: 'note',
+        period: `${period}:watch`,
+      }),
+    );
+    expect(task?.idempotency_key).toBe(
+      buildIdempotencyKey({
+        workflow: 'renewal-risk',
+        object: 'company',
+        id: 'co-northwind',
+        action: 'task',
+        period: `${period}:watch`,
       }),
     );
     expect(properties?.action_hash).toBe(
@@ -257,9 +275,29 @@ describe('runProcedure', () => {
   });
 
   it('skips a proposal when the ledger already has the idempotency key', async () => {
-    const keys = ['set_properties', 'note', 'task'].map((action) =>
-      buildIdempotencyKey({ workflow: 'renewal-risk', object: 'company', id: 'co-northwind', action, period }),
-    );
+    const keys = [
+      buildIdempotencyKey({
+        workflow: 'renewal-risk',
+        object: 'company',
+        id: 'co-northwind',
+        action: 'set_properties',
+        period: `${period}:72:watch`,
+      }),
+      buildIdempotencyKey({
+        workflow: 'renewal-risk',
+        object: 'company',
+        id: 'co-northwind',
+        action: 'note',
+        period: `${period}:watch`,
+      }),
+      buildIdempotencyKey({
+        workflow: 'renewal-risk',
+        object: 'company',
+        id: 'co-northwind',
+        action: 'task',
+        period: `${period}:watch`,
+      }),
+    ];
     const memory = memoryLedger(keys);
     const proposals = await run(memory.ledger);
     expect(proposals).toEqual([]);
