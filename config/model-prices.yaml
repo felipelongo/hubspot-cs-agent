@@ -1,0 +1,14 @@
+# Placeholder USD prices per million tokens.
+# Confirm these against Anthropic's current price list before treating a total as real spend.
+# Cache read and cache write tokens are billed at the input rate until a separate cache price is confirmed.
+# Model ids match LLM_MODEL_FAST and LLM_MODEL_STRONG in a real deployment (see modelId() in packages/config).
+
+models:
+  # Haiku-class placeholder: about $1 in / $5 out per million tokens.
+  claude-haiku-5-5:
+    input_usd_per_mtok: 1
+    output_usd_per_mtok: 5
+  # Sonnet-class placeholder: about $3 in / $15 out per million tokens.
+  claude-sonnet-5-5:
+    input_usd_per_mtok: 3
+    output_usd_per_mtok: 15

@@ -151,7 +151,7 @@ describe('createLlm', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('retries once after invalid JSON, then returns usage with a zero cost', async () => {
+  it('retries once after invalid JSON, then sums usage and leaves an unknown model unpriced', async () => {
     const valid = {
       experimental: true,
       headline: 'Quarterly review',
@@ -182,8 +182,103 @@ describe('createLlm', () => {
     expect(create.mock.calls[0]?.[0].model).toBe('fast-from-env');
     expect(result.output).toEqual(valid);
     expect(result.usage).toEqual({ input_tokens: 12, output_tokens: 6 });
-    expect(result.cost_usd).toBe(0);
+    expect(result.cost_usd).toBeNull();
     expect(result.model).toBe('fast-from-env');
+  });
+
+  it('prices a known model from the usage block, including cache read and write tokens', async () => {
+    const valid = {
+      experimental: true,
+      headline: 'Quarterly review',
+      sections: [{ title: 'Account', bullets: [{ text: 'One section.', citations: ['hubspot:company:co-1'] }] }],
+    };
+    const create = vi.fn().mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify(valid) }],
+      stop_reason: 'end_turn',
+      usage: {
+        input_tokens: 1_000_000,
+        output_tokens: 1_000_000,
+        cache_read_input_tokens: 2_000_000,
+        cache_creation_input_tokens: 1_000_000,
+      },
+      model: 'claude-haiku-5-5',
+    });
+    const llm = createAnthropicLlm(create, { LLM_MODEL_FAST: 'claude-haiku-5-5' });
+    const result = await llm.generate({
+      messages: [{ role: 'user', content: 'Prepare the review.' }],
+      schema_name: 'QsrPrep',
+      tier: 'fast',
+    });
+    expect(result.usage).toEqual({
+      input_tokens: 1_000_000,
+      output_tokens: 1_000_000,
+      cache_read_input_tokens: 2_000_000,
+      cache_creation_input_tokens: 1_000_000,
+    });
+    expect(result.cost_usd).toBe(9);
+    expect(result.model).toBe('claude-haiku-5-5');
+  });
+
+  it('prices each response on its own model and does not apply a later rate to earlier tokens', async () => {
+    const valid = {
+      experimental: true,
+      headline: 'Quarterly review',
+      sections: [{ title: 'Account', bullets: [{ text: 'One section.', citations: ['hubspot:company:co-1'] }] }],
+    };
+    const create = vi
+      .fn()
+      .mockResolvedValueOnce({
+        content: [{ type: 'tool_use', id: 'tool-1', name: 'hubspot_read_record', input: { object: 'company', id: 'co-1' } }],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 1_000_000, output_tokens: 0 },
+        model: 'claude-haiku-5-5',
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: 'text', text: JSON.stringify(valid) }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 1_000_000, output_tokens: 1_000_000 },
+        model: 'claude-sonnet-5-5',
+      });
+    const llm = createAnthropicLlm(create, { LLM_MODEL_FAST: 'claude-haiku-5-5' });
+    const result = await llm.generate({
+      messages: [{ role: 'user', content: 'Prepare the review.' }],
+      schema_name: 'QsrPrep',
+      tier: 'fast',
+      on_tool: async () => ({ ok: true }),
+    });
+    expect(result.usage).toEqual({ input_tokens: 2_000_000, output_tokens: 1_000_000 });
+    expect(result.cost_usd).toBe(19);
+    expect(result.model).toBe('claude-sonnet-5-5');
+  });
+
+  it('leaves the call unpriced when any response model has no price', async () => {
+    const valid = {
+      experimental: true,
+      headline: 'Quarterly review',
+      sections: [{ title: 'Account', bullets: [{ text: 'One section.', citations: ['hubspot:company:co-1'] }] }],
+    };
+    const create = vi
+      .fn()
+      .mockResolvedValueOnce({
+        content: [{ type: 'tool_use', id: 'tool-1', name: 'hubspot_read_record', input: { object: 'company', id: 'co-1' } }],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 1_000_000, output_tokens: 0 },
+        model: 'fast-from-env',
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: 'text', text: JSON.stringify(valid) }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 1_000_000, output_tokens: 0 },
+        model: 'claude-haiku-5-5',
+      });
+    const llm = createAnthropicLlm(create, { LLM_MODEL_FAST: 'claude-haiku-5-5' });
+    const result = await llm.generate({
+      messages: [{ role: 'user', content: 'Prepare the review.' }],
+      schema_name: 'QsrPrep',
+      tier: 'fast',
+      on_tool: async () => ({ ok: true }),
+    });
+    expect(result.cost_usd).toBeNull();
   });
 
   it('calls the read tool and stops after max_steps', async () => {

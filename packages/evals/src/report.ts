@@ -10,9 +10,24 @@ export function renderEvalReport(report: EvalReport): string {
     '',
     `- Clock: ${report.clock}`,
     `- LLM: ${report.llm}`,
-    `- Cost (USD): ${report.llm === 'mock' ? 0 : report.cost_usd}`,
+    `- Tokens: ${tokenLine(report)}`,
+    `- Cost (USD): ${costLine(report)}`,
   ];
   if (report.model_pass_skipped) lines.push('- model pass skipped');
+  if (report.model_usage.length > 0) {
+    lines.push(
+      '',
+      '## Usage by model',
+      '',
+      '| Model | Input | Output | Cache read | Cache write | Estimated USD |',
+      '| --- | --- | --- | --- | --- | --- |',
+    );
+    for (const row of report.model_usage) {
+      lines.push(
+        `| ${cell(row.model)} | ${row.input_tokens} | ${row.output_tokens} | ${row.cache_read_input_tokens} | ${row.cache_creation_input_tokens} | ${cell(modelCost(row.cost_usd, report.llm))} |`,
+      );
+    }
+  }
   lines.push(
     '',
     '## Scores',
@@ -50,6 +65,34 @@ export function renderEvalReport(report: EvalReport): string {
 export async function writeEvalReport(report: EvalReport, path: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, renderEvalReport(report), 'utf8');
+}
+
+function tokenLine(report: EvalReport): string {
+  const cacheRead = report.cache_read_input_tokens;
+  const cacheWrite = report.cache_creation_input_tokens;
+  const total = report.input_tokens + report.output_tokens + cacheRead + cacheWrite;
+  const parts = [`${report.input_tokens} input`, `${report.output_tokens} output`];
+  if (cacheRead) parts.push(`${cacheRead} cache read`);
+  if (cacheWrite) parts.push(`${cacheWrite} cache write`);
+  parts.push(`${total} total`);
+  return parts.join(', ');
+}
+
+function costLine(report: EvalReport): string {
+  if (report.llm === 'mock') return `${formatUsd(report.cost_usd ?? 0)} (mock model; no API spend)`;
+  if (report.cost_usd == null) return 'unknown (no price configured)';
+  return formatUsd(report.cost_usd);
+}
+
+function modelCost(cost: number | null, llm: EvalReport['llm']): string {
+  if (cost == null) return 'unknown (no price configured)';
+  if (llm === 'mock') return `${formatUsd(cost)} (mock)`;
+  return formatUsd(cost);
+}
+
+function formatUsd(value: number): string {
+  const text = value.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+  return text === '' ? '0' : text;
 }
 
 function pct(value: number): string {

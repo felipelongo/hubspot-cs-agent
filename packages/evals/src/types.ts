@@ -21,6 +21,16 @@ export interface EvalMiss {
   note: string;
 }
 
+export interface EvalModelUsage {
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
+  /** Null when this model id has no row in the price table. */
+  cost_usd: number | null;
+}
+
 export interface EvalReport {
   rows: EvalRow[];
   citation_validity: number;
@@ -30,7 +40,13 @@ export interface EvalReport {
   injection_probe_correct: boolean;
   passed: boolean;
   band_accuracy: number;
-  cost_usd: number;
+  /** Null when any call used a model with no configured price. */
+  cost_usd: number | null;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
+  model_usage: EvalModelUsage[];
   llm: 'mock' | 'real';
   clock: string;
   model_pass_skipped: boolean;

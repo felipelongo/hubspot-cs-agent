@@ -348,11 +348,17 @@ export function createLedgerPort(sql: Sql): LedgerPort {
     },
 
     async runCost(runId) {
-      const rows = await sql.query<{ cost: number | string | null }>(
-        'SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM llm_calls WHERE run_id = $1',
+      const rows = await sql.query<{ cost: number | string | null; calls: number | string; priced: number | string }>(
+        `SELECT SUM(cost_usd) AS cost, COUNT(*) AS calls, COUNT(cost_usd) AS priced
+         FROM llm_calls WHERE run_id = $1`,
         [runId],
       );
-      return Number(rows[0]?.cost ?? 0);
+      const row = rows[0];
+      const calls = Number(row?.calls ?? 0);
+      const priced = Number(row?.priced ?? 0);
+      if (calls === 0) return 0;
+      if (priced !== calls) return null;
+      return Number(row?.cost ?? 0);
     },
   };
 }
@@ -424,7 +430,7 @@ interface RunRow extends Record<string, unknown> {
   accounts_considered: number;
   proposals_created: number;
   commits: number;
-  cost_usd: number | string;
+  cost_usd: number | string | null;
   error: string | null;
 }
 
@@ -463,7 +469,7 @@ function runFromRow(row: RunRow): RunRecord {
     accounts_considered: Number(row.accounts_considered),
     proposals_created: Number(row.proposals_created),
     commits: Number(row.commits),
-    cost_usd: Number(row.cost_usd),
+    cost_usd: row.cost_usd == null ? null : Number(row.cost_usd),
     error: row.error,
   };
 }

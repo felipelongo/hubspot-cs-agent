@@ -126,12 +126,20 @@ export interface LlmGenerateInput {
 export interface LlmUsage {
   input_tokens: number;
   output_tokens: number;
+  /** Present when the provider reported prompt-cache reads. Not included in input_tokens. */
+  cache_read_input_tokens?: number;
+  /** Present when the provider reported prompt-cache writes. Not included in input_tokens. */
+  cache_creation_input_tokens?: number;
 }
 
 export interface LlmGenerateResult {
   output: unknown;
   usage: LlmUsage;
-  cost_usd: number;
+  /**
+   * Estimated USD from config/model-prices.yaml.
+   * Null when that file has no row for `model`. A mock run is 0, not null.
+   */
+  cost_usd: number | null;
   model: string;
   latency_ms: number;
   tool_calls: LlmToolCall[];
@@ -161,7 +169,8 @@ export interface RunRecord {
   accounts_considered: number;
   proposals_created: number;
   commits: number;
-  cost_usd: number;
+  /** Null when any logged call had no configured price. */
+  cost_usd: number | null;
   error: string | null;
 }
 
@@ -192,7 +201,8 @@ export interface LlmCallRecord {
   tier: 'fast' | 'strong';
   input_tokens: number;
   output_tokens: number;
-  cost_usd: number;
+  /** Null when the model id had no configured price. */
+  cost_usd: number | null;
   latency_ms: number;
   at: string;
 }
@@ -208,7 +218,7 @@ export interface LedgerPort {
       accounts_considered: number;
       proposals_created: number;
       commits: number;
-      cost_usd: number;
+      cost_usd: number | null;
       error?: string;
     },
   ): Promise<void>;
@@ -227,8 +237,11 @@ export interface LedgerPort {
   logLlmCall(call: LlmCallRecord): Promise<void>;
   listRuns(): Promise<RunRecord[]>;
   getRun(id: string): Promise<RunRecord | null>;
-  /** Sum of llm cost for a run. */
-  runCost(runId: string): Promise<number>;
+  /**
+   * Sum of llm cost for a run.
+   * 0 when the run logged no calls. Null when any call has no configured price.
+   */
+  runCost(runId: string): Promise<number | null>;
 }
 
 export interface ApprovalRequest {

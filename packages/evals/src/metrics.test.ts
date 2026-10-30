@@ -152,26 +152,38 @@ describe('citations and the injection phrase', () => {
   });
 });
 
+function reportFixture(overrides: Partial<EvalReport> = {}): EvalReport {
+  const thresholds = loadThresholds();
+  return {
+    rows: [],
+    citation_validity: 1,
+    at_risk_recall: 0.5,
+    at_risk_precision: 1,
+    false_positive_trap_correct: true,
+    injection_probe_correct: true,
+    passed: false,
+    band_accuracy: 0.5,
+    cost_usd: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_input_tokens: 0,
+    cache_creation_input_tokens: 0,
+    model_usage: [],
+    llm: 'mock',
+    clock: '2026-10-30T12:00:00.000Z',
+    model_pass_skipped: true,
+    thresholds,
+    expected_at_risk: 2,
+    predicted_at_risk: 1,
+    true_positives: 1,
+    misses: [],
+    ...overrides,
+  };
+}
+
 describe('eval report', () => {
   it('says when the model pass was skipped and lists misses', () => {
-    const thresholds = loadThresholds();
-    const report: EvalReport = {
-      rows: [],
-      citation_validity: 1,
-      at_risk_recall: 0.5,
-      at_risk_precision: 1,
-      false_positive_trap_correct: true,
-      injection_probe_correct: true,
-      passed: false,
-      band_accuracy: 0.5,
-      cost_usd: 0,
-      llm: 'mock',
-      clock: '2026-10-30T12:00:00.000Z',
-      model_pass_skipped: true,
-      thresholds,
-      expected_at_risk: 2,
-      predicted_at_risk: 1,
-      true_positives: 1,
+    const report = reportFixture({
       misses: [
         {
           company_id: 'co-9',
@@ -185,11 +197,60 @@ describe('eval report', () => {
           note: 'band',
         },
       ],
-    };
+    });
     const markdown = renderEvalReport(report);
     expect(markdown).toContain('model pass skipped');
     expect(markdown).toContain('The demo uses the real clock');
     expect(markdown).toContain('co-9 Quiet Co');
     expect(markdown).toContain('Cost (USD): 0');
+    expect(markdown).toContain('mock model; no API spend');
+    expect(markdown).toContain('Tokens: 0 input, 0 output, 0 total');
+  });
+
+  it('shows token totals, estimated cost, and a per-model breakdown', () => {
+    const markdown = renderEvalReport(reportFixture({
+      llm: 'real',
+      cost_usd: 9,
+      input_tokens: 1_000_000,
+      output_tokens: 1_000_000,
+      cache_read_input_tokens: 2_000_000,
+      cache_creation_input_tokens: 1_000_000,
+      model_pass_skipped: false,
+      model_usage: [
+        {
+          model: 'claude-haiku-5-5',
+          input_tokens: 1_000_000,
+          output_tokens: 1_000_000,
+          cache_read_input_tokens: 2_000_000,
+          cache_creation_input_tokens: 1_000_000,
+          cost_usd: 9,
+        },
+      ],
+    }));
+    expect(markdown).toContain('Tokens: 1000000 input, 1000000 output, 2000000 cache read, 1000000 cache write, 5000000 total');
+    expect(markdown).toContain('Cost (USD): 9');
+    expect(markdown).toContain('claude-haiku-5-5');
+    expect(markdown).not.toContain('mock model');
+  });
+
+  it('prints unknown when a real model has no configured price', () => {
+    const markdown = renderEvalReport(reportFixture({
+      llm: 'real',
+      cost_usd: null,
+      model_pass_skipped: false,
+      model_usage: [
+        {
+          model: 'fast-from-env',
+          input_tokens: 12,
+          output_tokens: 6,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cost_usd: null,
+        },
+      ],
+    }));
+    expect(markdown).toContain('Cost (USD): unknown (no price configured)');
+    expect(markdown).toContain('fast-from-env');
+    expect(markdown).toContain('unknown (no price configured)');
   });
 });
