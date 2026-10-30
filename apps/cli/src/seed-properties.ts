@@ -21,12 +21,18 @@ const BOOLEAN_OPTIONS = [
 
 /**
  * Custom properties the fixture rows actually use.
- * A value is a number like arr / seats_*, a datetime like last_login_at,
+ * A value is a number like arr / attributed_gifts_ytd, a date like contract_start,
+ * a datetime like last_dashboard_login_at,
  * a true/false flag like cs_left_company / seed_stage_regressed, or text.
  * seed_external_id is text, and unique only on company, contact, deal, and ticket.
  */
 export function isHubSpotForbidden(error: unknown): boolean {
   return error instanceof HubSpotApiError && error.status === 403;
+}
+
+/** A search by seed_external_id 400s when that property does not exist on the object. */
+export function isMissingSeedPropertySearch(error: unknown): boolean {
+  return error instanceof HubSpotApiError && error.status === 400;
 }
 
 export async function ensureSeedProperties(
@@ -126,6 +132,9 @@ function definitionFor(object: ObjectType, name: string, samples: string[]): Pro
   if (samples.length > 0 && samples.every(isNumberValue)) {
     return { ...base, type: 'number', fieldType: 'number' };
   }
+  if (samples.length > 0 && samples.every(isIsoDate)) {
+    return { ...base, type: 'date', fieldType: 'date' };
+  }
   if (samples.length > 0 && samples.every(isIsoDateTime)) {
     return { ...base, type: 'datetime', fieldType: 'date' };
   }
@@ -143,6 +152,10 @@ function isBooleanValue(value: string): boolean {
 
 function isNumberValue(value: string): boolean {
   return /^-?\d+(?:\.\d+)?$/.test(value);
+}
+
+function isIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 function isIsoDateTime(value: string): boolean {

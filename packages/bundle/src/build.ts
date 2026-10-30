@@ -1,5 +1,6 @@
 import type { PortalConfig } from '@cs-agent/config';
 import {
+  CONTACT_ROLES,
   parseHubspotDate,
   ref,
   withBundleHash,
@@ -7,6 +8,7 @@ import {
   type ActivitySnapshot,
   type Clock,
   type CompanySnapshot,
+  type ContactRole,
   type ContactSnapshot,
   type CrmRecord,
   type DealSnapshot,
@@ -21,7 +23,7 @@ import {
 
 const DAY_MS = 86_400_000;
 
-const CONTACT_ROLES = new Set<ContactSnapshot['role']>(['champion', 'economic_buyer', 'admin', 'end_user', 'other']);
+const CONTACT_ROLE_SET = new Set<ContactRole>(CONTACT_ROLES);
 
 /**
  * Pull one company and the records tied to it, then normalize them with the portal file.
@@ -34,7 +36,7 @@ export async function buildAccountBundle(input: {
   clock: Clock;
 }): Promise<AccountBundle> {
   const { hubspot, portal, clock } = input;
-  const companyRecord = await hubspot.getRecord(ref('company', input.companyId), propertyNames(portal.properties.company));
+  const companyRecord = await hubspot.getRecord(ref('company', input.companyId), companyPropertyNames(portal));
   if (!companyRecord) {
     throw new Error(`Company ${input.companyId} was not found.`);
   }
@@ -101,6 +103,10 @@ function propertyNames(map: Record<string, string>): string[] {
   return [...new Set(Object.values(map))];
 }
 
+function companyPropertyNames(portal: PortalConfig): string[] {
+  return [...new Set([...propertyNames(portal.properties.company), ...Object.values(portal.platform)])];
+}
+
 function field(record: CrmRecord, map: Record<string, string>, logical: string): string | null {
   const name = map[logical];
   if (!name) return null;
@@ -123,17 +129,25 @@ function isoDate(value: string | null): string | null {
 
 function buildCompany(record: CrmRecord, portal: PortalConfig): CompanySnapshot {
   const map = portal.properties.company;
+  const platform = portal.platform;
   return {
     ref: record.ref,
     name: field(record, map, 'name') ?? '',
     domain: field(record, map, 'domain') ?? '',
     industry: field(record, map, 'industry'),
     employees: numberOrNull(field(record, map, 'employees')),
-    plan: field(record, map, 'plan'),
-    arr: numberOrNull(field(record, map, 'arr')),
-    seats_purchased: numberOrNull(field(record, map, 'seats_purchased')),
-    seats_active: numberOrNull(field(record, map, 'seats_active')),
-    last_login_at: isoDate(field(record, map, 'last_login_at')),
+    plan: field(record, platform, 'plan') ?? field(record, map, 'plan'),
+    arr: numberOrNull(field(record, platform, 'arr') ?? field(record, map, 'arr')),
+    contract_start: isoDate(field(record, platform, 'contract_start')),
+    guarantee_multiple: numberOrNull(field(record, platform, 'guarantee_multiple')),
+    attributed_gifts_ytd: numberOrNull(field(record, platform, 'attributed_gifts_ytd')),
+    hot_leads_delivered_90d: numberOrNull(field(record, platform, 'hot_leads_delivered_90d')),
+    hot_leads_followed_up_90d: numberOrNull(field(record, platform, 'hot_leads_followed_up_90d')),
+    hot_leads_unworked: numberOrNull(field(record, platform, 'hot_leads_unworked')),
+    oldest_unworked_lead_days: numberOrNull(field(record, platform, 'oldest_unworked_lead_days')),
+    last_dashboard_login_at: isoDate(field(record, platform, 'last_dashboard_login_at')),
+    alert_open_rate_30d: numberOrNull(field(record, platform, 'alert_open_rate_30d')),
+    fiscal_year_start_month: numberOrNull(field(record, platform, 'fiscal_year_start_month')),
     owner_id: field(record, map, 'owner_id'),
     seed_csm: field(record, map, 'seed_csm'),
     external_id: field(record, map, 'seed_external_id'),
@@ -144,7 +158,7 @@ function buildCompany(record: CrmRecord, portal: PortalConfig): CompanySnapshot 
 function buildContact(record: CrmRecord, portal: PortalConfig): ContactSnapshot {
   const map = portal.properties.contact;
   const roleRaw = field(record, map, 'role');
-  const role = roleRaw && CONTACT_ROLES.has(roleRaw as ContactSnapshot['role']) ? (roleRaw as ContactSnapshot['role']) : 'other';
+  const role = roleRaw && CONTACT_ROLE_SET.has(roleRaw as ContactRole) ? (roleRaw as ContactRole) : 'other';
   const first = field(record, map, 'first_name') ?? '';
   const last = field(record, map, 'last_name') ?? '';
   return {

@@ -39,8 +39,14 @@
     {
       "company_id": "co-commit-02",
       "days_ago": 18,
-      "body": "Logged that the operators like the weekly report. No follow-up was promised.",
+      "body": "Logged that the development team likes the weekly gift report. No follow-up was promised.",
       "commitment": null
+    },
+    {
+      "company_id": "co-commit-02",
+      "days_ago": 7,
+      "body": "You will assign the unworked supporters by 2026-11-02.",
+      "commitment": { "text": "assign the unworked supporters", "due_date": "2026-11-02" }
     }
   ]
 }

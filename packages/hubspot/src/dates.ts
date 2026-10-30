@@ -1,7 +1,7 @@
 /**
  * HubSpot often returns datetimes as 13-digit epoch milliseconds.
  * Known date keys include closedate, createdate, hs_timestamp,
- * hs_meeting_start_time, last_login_at, and cs_last_assessed_at.
+ * hs_meeting_start_time, contract_start, last_dashboard_login_at, and cs_last_assessed_at.
  * Record ids are left alone.
  */
 const DATE_KEYS = new Set([
@@ -9,7 +9,8 @@ const DATE_KEYS = new Set([
   'createdate',
   'hs_timestamp',
   'hs_meeting_start_time',
-  'last_login_at',
+  'contract_start',
+  'last_dashboard_login_at',
   'cs_last_assessed_at',
 ]);
 

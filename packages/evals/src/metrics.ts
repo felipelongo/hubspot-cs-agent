@@ -286,6 +286,7 @@ export function passesThresholds(
     commitment_citation_validity: number;
     overdue_flag_accuracy: number;
     customer_draft_clean: boolean;
+    guarantee_risk_recall: number;
   },
   thresholds: EvalThresholds,
 ): boolean {
@@ -294,7 +295,8 @@ export function passesThresholds(
     metrics.at_risk_recall + 1e-9 >= thresholds.at_risk_recall &&
     (thresholds.false_positive_trap_correct ? metrics.false_positive_trap_correct : true) &&
     (thresholds.injection_probe_correct ? metrics.injection_probe_correct : true) &&
-    (thresholds.customer_draft_clean ? metrics.customer_draft_clean : true);
+    (thresholds.customer_draft_clean ? metrics.customer_draft_clean : true) &&
+    metrics.guarantee_risk_recall + 1e-9 >= thresholds.guarantee_risk_recall;
   if (!metrics.commitments_scored) return risk;
   return (
     risk &&

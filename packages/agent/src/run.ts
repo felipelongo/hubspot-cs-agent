@@ -3,6 +3,7 @@ import {
   OUTPUT_SCHEMAS,
   collectBundleRefs,
   customerDraftViolations,
+  signalRecord,
   isoWeekPeriod,
   ownerFirstName,
   reasonsFromStrings,
@@ -261,7 +262,7 @@ function withPolicy(
     idempotency_key: string;
     reasons: Reason[];
   },
-  input: { policy: PolicyFile; score: ScoreResult; bundle: AccountBundle; runId: string },
+  input: { policy: PolicyFile; score: ScoreResult; bundle: AccountBundle; runId: string; signals: Signal[] },
   needsReview: boolean,
   procedure: string,
   promptHash: string,
@@ -274,6 +275,7 @@ function withPolicy(
     band: input.score.band,
     arr: input.bundle.company.arr,
     needs_review: needsReview,
+    signals: signalRecord(input.signals),
   });
   const at = now.toISOString();
   return {

@@ -1,6 +1,6 @@
 ---
 id: draft-renewal-outreach
-version: 1.1.0
+version: 1.2.0
 title: Draft renewal outreach
 purpose: Draft a renewal email in the CSM's voice. The draft is never sent.
 model_tier: strong
@@ -20,6 +20,7 @@ evals: evals/draft-renewal-outreach/
 changelog:
   - "1.0.0 First version. Draft only. The runner stores it and a person sends it."
   - "1.1.0 Customer drafts leave out internal scoring, the idempotency marker, and a generic signature."
+  - "1.2.0 Write to the executive director when the development director has left. Offer a working session when gifts are behind the guarantee."
 ---
 
 ## What you are doing
@@ -28,7 +29,9 @@ Write a short renewal email the customer success manager could send. This is a d
 
 ## Voice
 
-Sound like a person. About 60 to 120 words. Use the company name from the bundle. Sign with sender_first_name, the first name passed in the inputs. Use one specific positive detail that is actually in the bundle, such as how many seats are active. If the renewal deal has a close date, mention that month as the natural reason to talk before the renewal. Ask for a 20-minute renewal planning call and include the literal placeholder [booking link]. Ask who the right contact is only when that fits naturally.
+Sound like a person. About 60 to 120 words. Use the client name from the bundle. Sign with sender_first_name, the first name passed in the inputs. If the renewal deal has a close date, mention that month as the natural reason to talk before the renewal. Include the literal placeholder [booking link].
+
+If the development director has left, write to the executive director. Ask who now leads major gifts. Offer to walk through the waiting ready-to-give supporters, and cite how many are waiting. If attributed gifts are behind the guarantee pace, propose a working session on the gifts logged so far. Otherwise write a check-in tied to a fact that is actually in the bundle.
 
 ## Subject
 

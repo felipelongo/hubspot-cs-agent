@@ -6,6 +6,7 @@ import { computeSignals } from '@cs-agent/signals';
 import {
   CommitmentExtractSchema,
   collectBundleRefs,
+  signalRecord,
   customerDraftExtraTerms,
   customerDraftViolations,
   frozenClock,
@@ -52,6 +53,7 @@ export async function runEval(input?: { clock?: Clock; llm?: 'mock' | 'real' }):
   const misses: EvalMiss[] = [];
   const trapRows: { archetype: string; actual_band: string }[] = [];
   const injectionRows: { injection_probe: boolean; expected_band: string; actual_band: string; leak: boolean }[] = [];
+  const guaranteeRows: { flagged: boolean; escalation: boolean }[] = [];
   const commitmentInputs: CommitmentAccountInput[] = [];
   const extraForbidden = customerDraftExtraTerms({
     ruleIds: [...rules.rules.map((rule) => rule.id), ...policy.rules.map((rule) => rule.id)],
@@ -99,6 +101,7 @@ export async function runEval(input?: { clock?: Clock; llm?: 'mock' | 'real' }):
         band: score.band,
         arr: bundle.company.arr,
         needs_review: needsReview,
+        signals: signalRecord(signals),
       }) || modelEscalation;
     const injection = isInjection(account);
     const row: EvalRow = {
@@ -111,6 +114,13 @@ export async function runEval(input?: { clock?: Clock; llm?: 'mock' | 'real' }):
     };
     rows.push(row);
     trapRows.push({ archetype: account.archetype, actual_band: score.band });
+    if (account.archetype === 'guarantee_behind') {
+      const pace = signals.find((signal) => signal.key === 'roi_pace')?.value;
+      guaranteeRows.push({
+        flagged: typeof pace === 'number' && pace < 0.5,
+        escalation,
+      });
+    }
     injectionRows.push({
       injection_probe: injection,
       expected_band: account.expected_band,
@@ -199,6 +209,8 @@ export async function runEval(input?: { clock?: Clock; llm?: 'mock' | 'real' }):
       };
   const customer_draft_clean =
     model == null || (draftViolations.length === 0 && (draftTargets === 0 || draftCount === draftTargets));
+  const guaranteeCaught = guaranteeRows.filter((row) => row.flagged && row.escalation).length;
+  const guarantee_risk_recall = guaranteeRows.length === 0 ? 1 : guaranteeCaught / guaranteeRows.length;
   const passed = passesThresholds(
     {
       citation_validity,
@@ -211,6 +223,7 @@ export async function runEval(input?: { clock?: Clock; llm?: 'mock' | 'real' }):
       commitment_citation_validity: commitments.commitment_citation_validity,
       overdue_flag_accuracy: commitments.overdue_flag_accuracy,
       customer_draft_clean,
+      guarantee_risk_recall,
     },
     thresholds,
   );
@@ -244,6 +257,7 @@ export async function runEval(input?: { clock?: Clock; llm?: 'mock' | 'real' }):
     commitment_citation_validity: commitments.commitment_citation_validity,
     overdue_flag_accuracy: commitments.overdue_flag_accuracy,
     customer_draft_clean,
+    guarantee_risk_recall,
     expected_commitments: commitments.expected_commitments,
     predicted_commitments: commitments.predicted_commitments,
     matched_commitments: commitments.matched_commitments,

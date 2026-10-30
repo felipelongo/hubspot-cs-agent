@@ -1,8 +1,8 @@
 ---
 id: prepare-qsr
-version: 0.1.0
-title: Prepare a quarterly success review
-purpose: Outline a quarterly success review. This procedure is experimental.
+version: 0.2.0
+title: Prepare a quarterly ROI review
+purpose: Outline a quarterly ROI review. This procedure is experimental.
 model_tier: fast
 inputs:
   - AccountBundle
@@ -16,8 +16,9 @@ evals: evals/prepare-qsr/
 experimental: true
 changelog:
   - "0.1.0 Stub outline. Not ready to run without a person."
+  - "0.2.0 Quarterly ROI review: leads delivered, followed up, gifts attributed, and pace versus the guarantee."
 ---
 
 ## Outline
 
-This is a stub. Return a QsrPrep with experimental set to true, a one-line headline, and a single section. Cite the company. A person reviews the note before anyone relies on it.
+Return a QsrPrep with experimental set to true, a one-line headline for a quarterly ROI review, and a single section. Cover leads delivered, leads followed up, gifts attributed, and pace versus the guarantee, using only numbers in the bundle. Cite the company. A person reviews the note before anyone relies on it.

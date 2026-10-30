@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  signalRecord,
   type Clock,
   type CrmRecord,
   type HubSpotPort,
@@ -11,6 +12,7 @@ import {
   type RunMode,
   type ScoringRules,
   type SearchRequest,
+  type Signal,
 } from '@cs-agent/core';
 import type { PortalConfig } from '@cs-agent/config';
 import { accountNeedsLead } from '@cs-agent/policy';
@@ -109,7 +111,7 @@ async function considerCompany(input: WorkflowInput, runId: string, companyId: s
   });
   const signals = computeSignals(bundle, input.clock);
   const score = scoreSignals(signals, input.rules);
-  const procedureIds = proceduresFor(input, score.band, score.needs_review, bundle.company.arr);
+  const procedureIds = proceduresFor(input, score.band, score.needs_review, bundle.company.arr, signals);
   const produced: ProposedAction[] = [];
   for (const procedureId of procedureIds) {
     const rows = await runProcedure({
@@ -131,12 +133,27 @@ async function considerCompany(input: WorkflowInput, runId: string, companyId: s
   await settle(input, produced, input.name !== 'qsr-prep', counts);
 }
 
-function proceduresFor(input: WorkflowInput, band: HealthBand, needsReview: boolean, arr: number | null): string[] {
+function proceduresFor(
+  input: WorkflowInput,
+  band: HealthBand,
+  needsReview: boolean,
+  arr: number | null,
+  signals: Signal[],
+): string[] {
   if (input.name === 'commitments-sweep') return ['extract-commitments'];
   if (input.name === 'qsr-prep') return ['prepare-qsr'];
   const ids = ['assess-account-risk'];
   if (band === 'at_risk' || band === 'critical') ids.push('draft-renewal-outreach');
-  if (accountNeedsLead(input.policy, { band, arr, needs_review: needsReview })) ids.push('escalation-brief');
+  if (
+    accountNeedsLead(input.policy, {
+      band,
+      arr,
+      needs_review: needsReview,
+      signals: signalRecord(signals),
+    })
+  ) {
+    ids.push('escalation-brief');
+  }
   return ids;
 }
 

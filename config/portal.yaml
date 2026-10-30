@@ -22,7 +22,7 @@ idempotency_period: iso_week
 
 cs_lead:
   name: Riley Okonkwo
-  email: riley.okonkwo@example.com
+  email: riley.okonkwo@example.org
 
 ticket_closed_values:
   - "4"
@@ -65,9 +65,16 @@ properties:
     open_commitments: cs_open_commitments
     plan: plan
     arr: arr
-    seats_purchased: seats_purchased
-    seats_active: seats_active
-    last_login_at: last_login_at
+    contract_start: contract_start
+    guarantee_multiple: guarantee_multiple
+    attributed_gifts_ytd: attributed_gifts_ytd
+    hot_leads_delivered_90d: hot_leads_delivered_90d
+    hot_leads_followed_up_90d: hot_leads_followed_up_90d
+    hot_leads_unworked: hot_leads_unworked
+    oldest_unworked_lead_days: oldest_unworked_lead_days
+    last_dashboard_login_at: last_dashboard_login_at
+    alert_open_rate_30d: alert_open_rate_30d
+    fiscal_year_start_month: fiscal_year_start_month
     seed_external_id: seed_external_id
     seed_csm: seed_csm
     seed_origin: seed_origin
@@ -122,10 +129,20 @@ properties:
     type: hs_task_type
     owner: hubspot_owner_id
 
-usage:
-  seats_active: seats_active
-  seats_purchased: seats_purchased
-  last_login_at: last_login_at
+# Platform metrics. A real client can point these at different company fields.
+platform:
+  plan: plan
+  arr: arr
+  contract_start: contract_start
+  guarantee_multiple: guarantee_multiple
+  attributed_gifts_ytd: attributed_gifts_ytd
+  hot_leads_delivered_90d: hot_leads_delivered_90d
+  hot_leads_followed_up_90d: hot_leads_followed_up_90d
+  hot_leads_unworked: hot_leads_unworked
+  oldest_unworked_lead_days: oldest_unworked_lead_days
+  last_dashboard_login_at: last_dashboard_login_at
+  alert_open_rate_30d: alert_open_rate_30d
+  fiscal_year_start_month: fiscal_year_start_month
 
 rate_limits:
   # Privately distributed apps. Free and Starter are 100 per 10 seconds.

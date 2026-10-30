@@ -62,6 +62,12 @@ const PolicyMatchSchema = z.object({
   band: HealthBandSchema.optional(),
   arr_gte: z.number().optional(),
   needs_review: z.boolean().optional(),
+  signal: z.string().optional(),
+  eq: z.union([z.boolean(), z.number(), z.string()]).optional(),
+  lt: z.number().optional(),
+  lte: z.number().optional(),
+  gt: z.number().optional(),
+  gte: z.number().optional(),
 });
 
 const PolicyFileSchema = z.object({
@@ -105,10 +111,19 @@ const PortalSchema = z.object({
     call: z.record(z.string(), z.string()),
     task: z.record(z.string(), z.string()),
   }),
-  usage: z.object({
-    seats_active: z.string(),
-    seats_purchased: z.string(),
-    last_login_at: z.string(),
+  platform: z.object({
+    plan: z.string(),
+    arr: z.string(),
+    contract_start: z.string(),
+    guarantee_multiple: z.string(),
+    attributed_gifts_ytd: z.string(),
+    hot_leads_delivered_90d: z.string(),
+    hot_leads_followed_up_90d: z.string(),
+    hot_leads_unworked: z.string(),
+    oldest_unworked_lead_days: z.string(),
+    last_dashboard_login_at: z.string(),
+    alert_open_rate_30d: z.string(),
+    fiscal_year_start_month: z.string(),
   }),
   rate_limits: z.object({
     general_per_10s: z.number().positive(),

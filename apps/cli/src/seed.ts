@@ -9,7 +9,7 @@ import type {
   UpsertInput,
 } from '@cs-agent/core';
 import type { PortalConfig } from '@cs-agent/config';
-import { alignEnumerationValues, ensureSeedProperties, isHubSpotForbidden } from './seed-properties.js';
+import { alignEnumerationValues, ensureSeedProperties, isHubSpotForbidden, isMissingSeedPropertySearch } from './seed-properties.js';
 import { setupPortal } from './services.js';
 
 const SEEDED_OBJECTS: ObjectType[] = ['company', 'contact', 'deal', 'ticket', 'note', 'email', 'meeting', 'call', 'task'];
@@ -100,6 +100,7 @@ export async function seedHubSpot(hubspot: HubSpotPort, portal: PortalConfig, da
   const activityTotal = Object.values(activityCounts).reduce((sum, count) => sum + count, 0);
   const lines = [
     `Setup created ${setup.created.length}, unchanged ${setup.unchanged.length}, findings ${setup.findings.length}.`,
+    ...setup.notes,
     ...setup.findings.map((finding) => `  finding: ${finding}`),
     `Properties created ${stats.created}. Pipeline ${renewal.created ? 'created' : 'unchanged'}.`,
     `Owners: ${mapped.matched} matched by email, ${mapped.fallback} fell back to the token's user.`,
@@ -125,6 +126,10 @@ export async function resetSeed(hubspot: HubSpotPort): Promise<string> {
     } catch (error) {
       if (object === 'email' && isHubSpotForbidden(error)) {
         lines.push('email: skipped (token lacks the email scope)');
+        continue;
+      }
+      if (isMissingSeedPropertySearch(error)) {
+        lines.push(`${object}: 0`);
         continue;
       }
       throw error;
@@ -290,12 +295,18 @@ async function searchByExternalIds(
   const cursors = new Set<string>();
   let after: string | undefined;
   do {
-    const page = await hubspot.search(object, {
-      filters: [{ property: ID_PROPERTY, operator: 'IN', values: externalIds }],
-      properties: [ID_PROPERTY],
-      limit: SEARCH_LIMIT,
-      after,
-    });
+    let page;
+    try {
+      page = await hubspot.search(object, {
+        filters: [{ property: ID_PROPERTY, operator: 'IN', values: externalIds }],
+        properties: [ID_PROPERTY],
+        limit: SEARCH_LIMIT,
+        after,
+      });
+    } catch (error) {
+      if (isMissingSeedPropertySearch(error)) return results;
+      throw error;
+    }
     results.push(...page.results);
     if (!page.after || cursors.has(page.after)) break;
     cursors.add(page.after);

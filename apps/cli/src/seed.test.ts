@@ -202,11 +202,18 @@ function strictDatabase(): SeedDatabase {
         properties: {
           name: 'Fathom Rye',
           hubspot_owner_id: 'owner-avery',
-          plan: 'Team',
-          arr: '24000',
-          seats_purchased: '20',
-          seats_active: '18',
-          last_login_at: '2026-10-29T17:40:44.951Z',
+          plan: 'Annual',
+          arr: '68000',
+          contract_start: '2026-01-28',
+          guarantee_multiple: '10',
+          attributed_gifts_ytd: '433500',
+          hot_leads_delivered_90d: '30',
+          hot_leads_followed_up_90d: '0',
+          hot_leads_unworked: '30',
+          oldest_unworked_lead_days: '21',
+          last_dashboard_login_at: '2026-10-29T17:40:44.951Z',
+          alert_open_rate_30d: '0.35',
+          fiscal_year_start_month: '7',
           seed_external_id: 'co-1',
           seed_csm: 'Avery Quinn',
           seed_origin: 'cs-agent-seed',
@@ -295,8 +302,8 @@ describe('seedHubSpot against a portal that rejects unknown upserts', () => {
     const summary = await seedHubSpot(hubspot, portal, strictDatabase());
 
     const seeded = hubspot.createdProperties.filter((item) => !SETUP_PROPERTY_NAMES.has(item.property.name));
-    expect(seeded).toHaveLength(25);
-    expect(summary).toContain('Properties created 25. Pipeline created.');
+    expect(seeded).toHaveLength(32);
+    expect(summary).toContain('Properties created 20. Pipeline created.');
     expect(hubspot.createdProperties.some((item) => item.property.name === 'name')).toBe(false);
     expect(hubspot.createdProperties.some((item) => item.property.name === 'hs_pipeline')).toBe(false);
 
@@ -315,9 +322,9 @@ describe('seedHubSpot against a portal that rejects unknown upserts', () => {
     expect(createdProp(hubspot, 'meeting', 'seed_external_id')?.hasUniqueValue).toBeUndefined();
     expect(createdProp(hubspot, 'call', 'seed_external_id')?.hasUniqueValue).toBeUndefined();
     expect(createdProp(hubspot, 'company', 'arr')).toMatchObject({ type: 'number', fieldType: 'number', groupName: 'cs_agent' });
-    expect(createdProp(hubspot, 'company', 'seats_purchased')).toMatchObject({ type: 'number', fieldType: 'number' });
-    expect(createdProp(hubspot, 'company', 'seats_active')).toMatchObject({ type: 'number', fieldType: 'number' });
-    expect(createdProp(hubspot, 'company', 'last_login_at')).toMatchObject({ type: 'datetime', fieldType: 'date' });
+    expect(createdProp(hubspot, 'company', 'attributed_gifts_ytd')).toMatchObject({ type: 'number', fieldType: 'number' });
+    expect(createdProp(hubspot, 'company', 'contract_start')).toMatchObject({ type: 'date', fieldType: 'date' });
+    expect(createdProp(hubspot, 'company', 'last_dashboard_login_at')).toMatchObject({ type: 'datetime', fieldType: 'date' });
     expect(createdProp(hubspot, 'company', 'plan')).toMatchObject({ type: 'string', fieldType: 'text' });
     expect(createdProp(hubspot, 'contact', 'cs_left_company')).toMatchObject({
       type: 'enumeration',
@@ -429,7 +436,7 @@ describe('seedHubSpot when the token lacks the email scope', () => {
     expect(summary).toContain(
       'Skipped emails (2): token lacks the email scope (sales-email-read). Add it and re-run seed.',
     );
-    expect(summary).toContain('Properties created 23.');
+    expect(summary).toContain('Properties created 18.');
     expect(summary).toContain('activities 3.');
     expect(summary).toContain('Associations 2.');
     expect(hubspot.recordsOf('email')).toEqual([]);
@@ -479,7 +486,7 @@ describe('seedHubSpot when the token lacks the email scope', () => {
     expect(summary).toContain(
       'Skipped emails (1): token lacks the email scope (sales-email-read). Add it and re-run seed.',
     );
-    expect(summary).toContain('Properties created 25.');
+    expect(summary).toContain('Properties created 20.');
     expect(hubspot.recordsOf('email')).toEqual([]);
     expect(hubspot.recordsOf('note')).toHaveLength(1);
     expect(hubspot.recordsOf('meeting')).toHaveLength(1);
@@ -499,6 +506,16 @@ describe('seedHubSpot when the token lacks the email scope', () => {
     const hubspot = new ScopeDeniedPortal('call', 'records');
     await expect(resetSeed(hubspot)).rejects.toBeInstanceOf(HubSpotApiError);
     await expect(resetSeed(hubspot)).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('treats a 400 seed-property search on call and task as zero records', async () => {
+    const hubspot = new MissingSeedPropertyPortal();
+    await seedHubSpot(hubspot, portal, strictDatabase());
+    expect(hubspot.recordsOf('call')).toHaveLength(1);
+    const reset = await resetSeed(hubspot);
+    expect(reset).toContain('call: 0');
+    expect(reset).toContain('task: 0');
+    expect(reset).not.toContain('There was a problem with the request');
   });
 });
 
@@ -774,6 +791,10 @@ class StrictPortal implements HubSpotPort {
     return { created: true };
   }
 
+  async archiveProperty(object: ObjectType, name: string): Promise<void> {
+    this.properties.delete(`${object}:${name}`);
+  }
+
   async ensurePipeline(
     object: 'deal' | 'ticket',
     spec: { label: string; stages: { label: string }[] },
@@ -852,6 +873,16 @@ class StrictPortal implements HubSpotPort {
       if (filter.operator === 'EQ') return value === filter.value;
       return false;
     });
+  }
+}
+
+/** 400s call and task searches the way a missing seed_external_id property does. */
+class MissingSeedPropertyPortal extends StrictPortal {
+  override async search(object: ObjectType, request: SearchRequest): Promise<{ results: CrmRecord[]; after?: string }> {
+    if (object === 'call' || object === 'task') {
+      throw new HubSpotApiError(400, { message: 'There was a problem with the request.' });
+    }
+    return super.search(object, request);
   }
 }
 
@@ -1107,6 +1138,10 @@ class ShuffledUpsertPortal implements HubSpotPort {
     if (this.propertyDefs.has(key)) return { created: false };
     this.propertyDefs.set(key, property);
     return { created: true };
+  }
+
+  async archiveProperty(object: ObjectType, name: string): Promise<void> {
+    this.propertyDefs.delete(`${object}:${name}`);
   }
 
   async ensurePipeline(

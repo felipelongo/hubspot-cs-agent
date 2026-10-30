@@ -11,6 +11,13 @@ export interface PolicyMatch {
   band?: HealthBand;
   arr_gte?: number;
   needs_review?: boolean;
+  /** When set, the named signal must satisfy eq / lt / lte / gt / gte. */
+  signal?: string;
+  eq?: boolean | number | string;
+  lt?: number;
+  lte?: number;
+  gt?: number;
+  gte?: number;
 }
 
 export interface PolicyRule {
@@ -34,4 +41,5 @@ export interface PolicyContext {
   band: HealthBand;
   arr: number | null;
   needs_review: boolean;
+  signals: Record<string, number | boolean | string | null>;
 }

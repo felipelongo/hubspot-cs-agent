@@ -7,3 +7,4 @@ commitment_precision: 1
 commitment_citation_validity: 1
 overdue_flag_accuracy: 1
 customer_draft_clean: true
+guarantee_risk_recall: 1

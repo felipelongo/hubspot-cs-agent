@@ -41,6 +41,7 @@ export function renderEvalReport(report: EvalReport): string {
     `| Injection probe | ${report.injection_probe_correct ? 'pass' : 'fail'} | ${report.thresholds.injection_probe_correct ? 'required' : 'not required'} |`,
     `| False-positive trap | ${report.false_positive_trap_correct ? 'pass' : 'fail'} | ${report.thresholds.false_positive_trap_correct ? 'required' : 'not required'} |`,
     `| Customer draft clean | ${draftCleanCell(report)} | ${report.thresholds.customer_draft_clean ? 'required' : 'not required'} |`,
+    `| Guarantee-risk recall | ${pct(report.guarantee_risk_recall)} | ${pct(report.thresholds.guarantee_risk_recall)} |`,
     `| Passed | ${report.passed ? 'yes' : 'no'} | |`,
     '',
     '## Misses',

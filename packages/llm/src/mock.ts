@@ -36,11 +36,14 @@ interface CustomerData {
       ref?: Evidence;
       seats_active?: number | null;
       seats_purchased?: number | null;
+      hot_leads_unworked?: number | null;
     };
     owner?: { name?: string } | null;
+    contacts?: { name?: string; role?: string; left_company?: boolean }[];
     renewal_deal?: { close_date?: string | null } | null;
     activities?: { body?: string; ref?: Evidence }[];
   };
+  signals?: { key?: string; value?: number | boolean | string | null; explanation?: string }[];
   score?: {
     score?: number;
     band?: string;
@@ -63,7 +66,7 @@ function riskAssessment(data: CustomerData, allowed: Set<string>): unknown {
   const reasons =
     contributions.length > 0
       ? contributions.map((contribution) => ({
-          text: contribution.label || `Score contribution for the ${band} band.`,
+          text: reasonLine(contribution.label, contribution.signal_keys, data, band),
           citations: citationsFrom(contribution.evidence, company, allowed),
           signal_keys: contribution.signal_keys ?? [],
         }))
@@ -103,6 +106,21 @@ function riskAssessment(data: CustomerData, allowed: Set<string>): unknown {
   };
 }
 
+function reasonLine(
+  label: string | undefined,
+  keys: string[] | undefined,
+  data: CustomerData,
+  band: string,
+): string {
+  const base = label || `Score contribution for the ${band} band.`;
+  if (!data.signals) return base;
+  const extra = (keys ?? [])
+    .map((key) => data.signals?.find((signal) => signal.key === key)?.explanation)
+    .filter((item): item is string => Boolean(item))
+    .join(' ');
+  return extra ? `${base} ${extra}` : base;
+}
+
 function outreachDraft(data: CustomerData, allowed: Set<string>): unknown {
   const name = data.bundle?.company?.name || 'your team';
   const first = senderFirstName(data);
@@ -111,11 +129,24 @@ function outreachDraft(data: CustomerData, allowed: Set<string>): unknown {
   const when = month
     ? `I am writing ahead of your ${month} renewal so we can talk through the next year before that date arrives.`
     : `I am writing ahead of your renewal so we can talk through the next year before the date arrives.`;
-  const fact = seatFact(data) ?? `It has been good to work with the team at ${name}.`;
+  const departed = data.bundle?.contacts?.find((contact) => contact.role === 'development_director' && contact.left_company);
+  const noticed = data.signals?.find((signal) => signal.key === 'champion_left' && signal.value === true);
+  const director = data.bundle?.contacts?.find((contact) => contact.role === 'executive_director' && contact.name);
+  const unworked = data.bundle?.company?.hot_leads_unworked;
+  const pace = data.signals?.find((signal) => signal.key === 'roi_pace')?.value;
+  let fact = seatFact(data) ?? `It has been good to work with the development team at ${name}.`;
+  let hello = 'Hello,';
+  if ((departed || noticed) && director?.name && typeof unworked === 'number') {
+    hello = `Hello ${director.name},`;
+    const who = departed?.name ? `${departed.name}'s mailbox came back unavailable, so I am writing to you.` : 'I am writing to you because the development director is no longer there.';
+    fact = `${who} Could you tell me who now leads major gifts? I would like to walk through the ${unworked} waiting supporters who are ready to give.`;
+  } else if (typeof pace === 'number' && pace < 0.5) {
+    fact = `Attributed gifts are behind the pace we set against the annual fee. I would like a working session to look at the gifts logged so far and the supporters still waiting.`;
+  }
   const lines = [
-    'Hello,',
+    hello,
     '',
-    `I hope you are doing well at ${name}. ${fact} ${when} Would you have 20 minutes for a renewal planning call? You can choose a time here: [booking link]. If I have the wrong person, please tell me who the right contact is.`,
+    `I hope you are doing well at ${name}. ${fact} ${when} Would you have 20 minutes for a call? You can choose a time here: [booking link]. If I have the wrong person, please tell me who the right contact is.`,
     '',
     'Thank you,',
   ];
@@ -179,7 +210,7 @@ function commitmentExtract(data: CustomerData): unknown {
     for (const found of findPromises(activity.body)) {
       commitments.push({
         text: found.text,
-        owner,
+        owner: found.side === 'customer' ? 'customer' : owner,
         due_date: found.due,
         overdue: found.due < asOf,
         citations: [citation],
@@ -194,11 +225,16 @@ function qsrPrep(data: CustomerData, allowed: Set<string>): unknown {
   const company = citationsFrom(undefined, companyRef(data), allowed);
   return {
     experimental: true,
-    headline: `${name} quarterly review`,
+    headline: `${name} quarterly ROI review`,
     sections: [
       {
-        title: 'Account',
-        bullets: [{ text: `${name} quarterly success review outline.`, citations: company }],
+        title: 'Gifts and leads',
+        bullets: [
+          {
+            text: `${name}: leads delivered, followed up, gifts attributed, and pace versus the guarantee.`,
+            citations: company,
+          },
+        ],
       },
     ],
   };
@@ -221,14 +257,19 @@ function escalationBrief(data: CustomerData, allowed: Set<string>): unknown {
   };
 }
 
-function findPromises(body: string): { text: string; due: string }[] {
-  const found: { text: string; due: string }[] = [];
-  const patterns = [/we promised (.+?) by (\d{4}-\d{2}-\d{2})/gi, /we will (.+?) by (\d{4}-\d{2}-\d{2})/gi];
-  for (const pattern of patterns) {
-    for (const match of body.matchAll(pattern)) {
+function findPromises(body: string): { text: string; due: string; side: 'us' | 'customer' }[] {
+  const found: { text: string; due: string; side: 'us' | 'customer' }[] = [];
+  const patterns: { pattern: RegExp; side: 'us' | 'customer' }[] = [
+    { pattern: /we promised (.+?) by (\d{4}-\d{2}-\d{2})/gi, side: 'us' },
+    { pattern: /we'll (.+?) by (\d{4}-\d{2}-\d{2})/gi, side: 'us' },
+    { pattern: /we will (.+?) by (\d{4}-\d{2}-\d{2})/gi, side: 'us' },
+    { pattern: /you will (.+?) by (\d{4}-\d{2}-\d{2})/gi, side: 'customer' },
+  ];
+  for (const item of patterns) {
+    for (const match of body.matchAll(item.pattern)) {
       const text = match[1]?.trim();
       const due = match[2];
-      if (text && due) found.push({ text, due });
+      if (text && due) found.push({ text, due, side: item.side });
     }
   }
   return found;

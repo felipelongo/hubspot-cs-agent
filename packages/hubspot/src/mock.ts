@@ -270,6 +270,18 @@ export class MockHubSpot implements HubSpotPort {
     });
   }
 
+  async archiveProperty(object: ObjectType, name: string): Promise<void> {
+    return this.run(() => {
+      const list = this.propertyDefs.get(object) ?? [];
+      if (!list.some((item) => item.name === name)) return;
+      this.writeCount += 1;
+      this.propertyDefs.set(
+        object,
+        list.filter((item) => item.name !== name),
+      );
+    });
+  }
+
   async ensurePipeline(
     object: 'deal' | 'ticket',
     spec: { label: string; stages: { label: string }[] },

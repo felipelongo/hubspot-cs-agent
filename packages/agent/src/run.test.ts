@@ -34,9 +34,16 @@ function account(): AccountBundle {
       employees: 40,
       plan: 'Growth',
       arr: 24000,
-      seats_purchased: 40,
-      seats_active: 12,
-      last_login_at: null,
+      contract_start: null,
+      guarantee_multiple: null,
+      attributed_gifts_ytd: null,
+      hot_leads_delivered_90d: null,
+      hot_leads_followed_up_90d: null,
+      hot_leads_unworked: null,
+      oldest_unworked_lead_days: null,
+      last_dashboard_login_at: null,
+      alert_open_rate_30d: null,
+      fiscal_year_start_month: null,
       owner_id: 'owner-avery',
       seed_csm: 'Avery Quinn',
       external_id: 'northwind',
@@ -375,7 +382,7 @@ describe('runProcedure', () => {
     expect(drafts[0]?.idempotency_key).toContain('outreach');
     expect(String(drafts[0]?.payload.subject)).toBe('Planning ahead for your renewal');
     expect(String(drafts[0]?.payload.body)).toContain('Avery');
-    expect(String(drafts[0]?.payload.body)).toContain('12 of your 40 seats are active');
+    expect(String(drafts[0]?.payload.body)).toContain('development team at Northwind');
     expect(String(drafts[0]?.payload.body)).toContain('November');
     expect(String(drafts[0]?.payload.body)).toContain('[booking link]');
     expect(String(drafts[0]?.payload.body)).not.toContain('The account team');
@@ -406,7 +413,7 @@ describe('runProcedure', () => {
     expect(brief).toHaveLength(1);
     expect(brief[0]?.kind).toBe('escalate');
     expect(brief[0]?.payload.owner_id).toBe('owner-riley');
-    expect(brief[0]?.payload.to).toBe('riley.okonkwo@example.com');
+    expect(brief[0]?.payload.to).toBe('riley.okonkwo@example.org');
     expect(String(brief[0]?.payload.brief).split('\n')).toHaveLength(5);
     expect(brief[0]?.state).toBe('escalated');
   });

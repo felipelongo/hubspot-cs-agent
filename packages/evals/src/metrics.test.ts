@@ -25,9 +25,16 @@ function bundle(): AccountBundle {
       employees: null,
       plan: null,
       arr: null,
-      seats_purchased: null,
-      seats_active: null,
-      last_login_at: null,
+      contract_start: null,
+      guarantee_multiple: null,
+      attributed_gifts_ytd: null,
+      hot_leads_delivered_90d: null,
+      hot_leads_followed_up_90d: null,
+      hot_leads_unworked: null,
+      oldest_unworked_lead_days: null,
+      last_dashboard_login_at: null,
+      alert_open_rate_30d: null,
+      fiscal_year_start_month: null,
       owner_id: null,
       seed_csm: null,
       external_id: null,
@@ -98,6 +105,7 @@ describe('eval bars', () => {
       commitment_citation_validity: 1,
       overdue_flag_accuracy: 1,
       customer_draft_clean: true,
+      guarantee_risk_recall: 1,
     });
     const perfect = {
       citation_validity: 1,
@@ -110,6 +118,7 @@ describe('eval bars', () => {
       commitment_citation_validity: 1,
       overdue_flag_accuracy: 1,
       customer_draft_clean: true,
+      guarantee_risk_recall: 1,
     };
     expect(passesThresholds(perfect, thresholds)).toBe(true);
     expect(passesThresholds({ ...perfect, at_risk_recall: 0.89 }, thresholds)).toBe(false);
@@ -205,6 +214,7 @@ function reportFixture(overrides: Partial<EvalReport> = {}): EvalReport {
     matched_commitments: 0,
     commitment_misses: [],
     customer_draft_clean: true,
+    guarantee_risk_recall: 1,
     ...overrides,
   };
 }

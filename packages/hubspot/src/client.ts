@@ -305,6 +305,15 @@ class HubSpotClient implements HubSpotPort {
     return { created: true };
   }
 
+  async archiveProperty(object: ObjectType, name: string): Promise<void> {
+    const { status, body } = await this.call({
+      method: 'DELETE',
+      path: `/crm/v3/properties/${objectPath(object)}/${encodeURIComponent(name)}`,
+    });
+    if (status === 404) return;
+    assertOk(status, body);
+  }
+
   async ensurePipeline(
     object: 'deal' | 'ticket',
     spec: { label: string; stages: { label: string }[] },
@@ -457,6 +466,9 @@ function toProperty(body: unknown): PropertyDefinition | null {
     groupName?: unknown;
     description?: unknown;
     options?: unknown;
+    hubspotDefined?: unknown;
+    calculated?: unknown;
+    modificationMetadata?: unknown;
   };
   if (typeof raw.name !== 'string') return null;
   const options = Array.isArray(raw.options)
@@ -475,7 +487,16 @@ function toProperty(body: unknown): PropertyDefinition | null {
     groupName: typeof raw.groupName === 'string' ? raw.groupName : '',
     ...(typeof raw.description === 'string' ? { description: raw.description } : {}),
     ...(options.length > 0 ? { options } : {}),
+    ...(raw.hubspotDefined === true ? { hubspotDefined: true } : {}),
+    ...(propertyReadOnly(raw) ? { readOnly: true } : {}),
   };
+}
+
+function propertyReadOnly(raw: { calculated?: unknown; modificationMetadata?: unknown }): boolean {
+  if (raw.calculated === true) return true;
+  if (!raw.modificationMetadata || typeof raw.modificationMetadata !== 'object') return false;
+  const meta = raw.modificationMetadata as { readOnlyValue?: unknown; readOnlyDefinition?: unknown };
+  return meta.readOnlyValue === true || meta.readOnlyDefinition === true;
 }
 
 function mapPropertyType(type: string): PropertyDefinition['type'] {

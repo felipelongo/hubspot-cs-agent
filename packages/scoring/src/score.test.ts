@@ -18,120 +18,82 @@ function baseline(overrides: Record<string, Signal['value']> = {}): Signal[] {
     [SIGNAL_KEYS.openMediumTickets]: 0,
     [SIGNAL_KEYS.openLowTickets]: 0,
     [SIGNAL_KEYS.ticketTrendRatio]: 0.4,
-    [SIGNAL_KEYS.usageRatio]: 0.9,
-    [SIGNAL_KEYS.missingUsageData]: false,
     [SIGNAL_KEYS.championLeft]: false,
+    [SIGNAL_KEYS.departureNotice]: false,
     [SIGNAL_KEYS.budgetRiskLanguage]: false,
     [SIGNAL_KEYS.negativeSentiment]: false,
     [SIGNAL_KEYS.meetingBooked]: true,
     [SIGNAL_KEYS.dealStageRegression]: false,
-    [SIGNAL_KEYS.highUsageQuietOk]: false,
+    [SIGNAL_KEYS.leadsUnworked]: false,
+    [SIGNAL_KEYS.leadFollowupRate]: 0.9,
+    [SIGNAL_KEYS.roiPace]: 1.3,
+    [SIGNAL_KEYS.alertsIgnored]: false,
+    [SIGNAL_KEYS.renewalBeforeBudget]: false,
+    [SIGNAL_KEYS.engagedQuietOk]: false,
+    [SIGNAL_KEYS.missingPlatformData]: false,
     ...overrides,
   };
   return Object.entries(values).map(([key, value]) => signal(key, value));
 }
 
+function scored(overrides: Record<string, Signal['value']>): ReturnType<typeof scoreSignals> {
+  return scoreSignals(baseline(overrides), rules);
+}
+
 describe('every scoring rule', () => {
-  it('loads a versioned file and starts a quiet healthy account at 100', () => {
-    expect(rules.rules_version).toBe('1.0.0');
+  it('loads version 2 and starts a calm client at 100', () => {
+    expect(rules.rules_version).toBe('2.0.0');
     const result = scoreSignals(baseline(), rules);
     expect(result.score).toBe(100);
     expect(result.band).toBe('healthy');
     expect(result.contributions).toHaveLength(0);
+    expect(result.needs_review).toBe(false);
   });
 
-  it('missing usage forces review and is not healthy', () => {
-    const result = scoreSignals(baseline({ [SIGNAL_KEYS.missingUsageData]: true, [SIGNAL_KEYS.usageRatio]: null }), rules);
-    expect(result.needs_review).toBe(true);
-    expect(result.band).not.toBe('healthy');
-    expect(result.contributions.map((row) => row.rule)).toContain('missing_usage_data');
+  it('applies each rule once', () => {
+    expect(scored({ [SIGNAL_KEYS.missingPlatformData]: true })).toMatchObject({
+      score: 70,
+      band: 'watch',
+      needs_review: true,
+    });
+    expect(scored({ [SIGNAL_KEYS.championLeft]: true }).score).toBe(65);
+    expect(scored({ [SIGNAL_KEYS.leadsUnworked]: true }).score).toBe(88);
+    expect(scored({ [SIGNAL_KEYS.roiPace]: 0.4 }).score).toBe(70);
+    expect(scored({ [SIGNAL_KEYS.roiPace]: 0.6 }).score).toBe(85);
+    expect(scored({ [SIGNAL_KEYS.roiPace]: 0.8 }).score).toBe(100);
+    expect(scored({ [SIGNAL_KEYS.alertsIgnored]: true }).score).toBe(90);
+    expect(scored({ [SIGNAL_KEYS.daysSinceLastTouch]: 40 }).score).toBe(90);
+    expect(scored({ [SIGNAL_KEYS.daysSinceLastTouch]: 70 }).score).toBe(80);
+    expect(scored({ [SIGNAL_KEYS.daysSinceLastTouch]: 70, [SIGNAL_KEYS.engagedQuietOk]: true }).score).toBe(97);
+    expect(scored({ [SIGNAL_KEYS.openHighTickets]: 1 }).score).toBe(85);
+    expect(scored({ [SIGNAL_KEYS.openHighTickets]: 3 }).score).toBe(70);
+    expect(scored({ [SIGNAL_KEYS.openMediumTickets]: 1 }).score).toBe(95);
+    expect(scored({ [SIGNAL_KEYS.openMediumTickets]: 4 }).score).toBe(85);
+    expect(scored({ [SIGNAL_KEYS.negativeSentiment]: true }).score).toBe(88);
+    expect(scored({ [SIGNAL_KEYS.daysToRenewal]: 30 }).score).toBe(88);
+    expect(scored({ [SIGNAL_KEYS.daysToRenewal]: 31 }).score).toBe(100);
+    expect(scored({ [SIGNAL_KEYS.renewalBeforeBudget]: true }).score).toBe(92);
   });
 
-  it('champion left lands at risk', () => {
-    const result = scoreSignals(
-      baseline({ [SIGNAL_KEYS.championLeft]: true, [SIGNAL_KEYS.daysSinceLastTouch]: 40 }),
-      rules,
-    );
-    expect(result.score).toBe(48);
+  it('pins the published Hightide contributions at 43 / at_risk', () => {
+    const result = scored({
+      [SIGNAL_KEYS.championLeft]: true,
+      [SIGNAL_KEYS.leadsUnworked]: true,
+      [SIGNAL_KEYS.daysSinceLastTouch]: 40,
+      [SIGNAL_KEYS.roiPace]: 0.85,
+      [SIGNAL_KEYS.daysToRenewal]: 90,
+    });
+    expect(result.score).toBe(43);
     expect(result.band).toBe('at_risk');
-  });
-
-  it('usage drop and a 60-day silence stack', () => {
-    const result = scoreSignals(
-      baseline({
-        [SIGNAL_KEYS.daysSinceLastTouch]: 70,
-        [SIGNAL_KEYS.usageRatio]: 0.55,
-        [SIGNAL_KEYS.daysToRenewal]: 45,
-        [SIGNAL_KEYS.highUsageQuietOk]: false,
-      }),
-      rules,
-    );
-    expect(result.score).toBe(47);
-    expect(result.band).toBe('at_risk');
-    expect(result.contributions.map((row) => row.rule).sort()).toEqual(
-      ['quiet_account', 'renewal_within_45', 'usage_drop'].sort(),
-    );
-  });
-
-  it('does not punish a quiet account that is clearly using the product', () => {
-    const result = scoreSignals(
-      baseline({
-        [SIGNAL_KEYS.daysSinceLastTouch]: 75,
-        [SIGNAL_KEYS.usageRatio]: 0.95,
-        [SIGNAL_KEYS.openHighTickets]: 0,
-        [SIGNAL_KEYS.highUsageQuietOk]: true,
-      }),
-      rules,
-    );
-    expect(result.score).toBe(95);
-    expect(result.band).toBe('healthy');
-    expect(result.contributions.map((row) => row.rule)).toEqual(['quiet_but_active']);
-  });
-
-  it('counts each open high-priority ticket, up to the cap', () => {
-    const result = scoreSignals(baseline({ [SIGNAL_KEYS.openHighTickets]: 2, [SIGNAL_KEYS.negativeSentiment]: true, [SIGNAL_KEYS.daysToRenewal]: 30 }), rules);
-    expect(result.contributions.find((row) => row.rule === 'open_high_ticket')?.points).toBe(-40);
-    expect(result.score).toBe(33);
-    expect(result.band).toBe('critical');
-  });
-
-  it('caps high tickets at three', () => {
-    const result = scoreSignals(baseline({ [SIGNAL_KEYS.openHighTickets]: 9 }), rules);
-    expect(result.contributions.find((row) => row.rule === 'open_high_ticket')?.points).toBe(-60);
-  });
-
-  it('charges a medium ticket, a spike, a stage regression, and budget language', () => {
-    expect(scoreSignals(baseline({ [SIGNAL_KEYS.openMediumTickets]: 1 }), rules).score).toBe(94);
-    expect(scoreSignals(baseline({ [SIGNAL_KEYS.ticketTrendRatio]: 3 }), rules).score).toBe(88);
-    expect(scoreSignals(baseline({ [SIGNAL_KEYS.dealStageRegression]: true }), rules).score).toBe(85);
-    expect(scoreSignals(baseline({ [SIGNAL_KEYS.budgetRiskLanguage]: true }), rules).band).toBe('watch');
-  });
-
-  it('renewal windows are mutually exclusive, and a near renewal without a meeting adds a task-sized penalty', () => {
-    const soon = scoreSignals(
-      baseline({ [SIGNAL_KEYS.daysToRenewal]: 14, [SIGNAL_KEYS.meetingBooked]: false }),
-      rules,
-    );
-    expect(soon.score).toBe(72);
-    expect(soon.band).toBe('watch');
-    expect(soon.contributions.map((row) => row.rule).sort()).toEqual(['no_meeting_booked', 'renewal_within_14']);
-    expect(scoreSignals(baseline({ [SIGNAL_KEYS.daysToRenewal]: 30 }), rules).contributions.map((row) => row.rule)).toEqual([
-      'renewal_within_30',
+    expect(result.needs_review).toBe(false);
+    expect(result.contributions.map((item) => [item.rule, item.points])).toEqual([
+      ['champion_left', -35],
+      ['leads_unworked', -12],
+      ['stale_touch', -10],
     ]);
   });
 
-  it('does not let an old ticket trend look like a fresh spike', () => {
-    const result = scoreSignals(baseline({ [SIGNAL_KEYS.ticketTrendRatio]: 0.3, [SIGNAL_KEYS.openHighTickets]: 0 }), rules);
-    expect(result.band).toBe('healthy');
-    expect(result.score).toBe(100);
-  });
-
-  it('stores the rule id, the points, and the evidence ref', () => {
-    const result = scoreSignals(baseline({ [SIGNAL_KEYS.negativeSentiment]: true }), rules);
-    const row = result.contributions[0];
-    expect(row?.rule).toBe('negative_sentiment');
-    expect(row?.points).toBe(-15);
-    expect(row?.signal_keys).toContain(SIGNAL_KEYS.negativeSentiment);
-    expect(row?.evidence).toEqual([company]);
+  it('does not score a null roi pace', () => {
+    expect(scored({ [SIGNAL_KEYS.roiPace]: null }).score).toBe(100);
   });
 });

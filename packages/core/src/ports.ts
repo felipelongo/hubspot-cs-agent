@@ -44,6 +44,10 @@ export interface PropertyDefinition {
   options?: { label: string; value: string }[];
   /** Required for batch upsert id properties. Engagements often reject this. */
   hasUniqueValue?: boolean;
+  /** HubSpot-defined properties are not archived by setup. */
+  hubspotDefined?: boolean;
+  /** Read-only or calculated properties are not archived by setup. */
+  readOnly?: boolean;
 }
 
 export interface HubSpotOwner {
@@ -97,6 +101,7 @@ export interface HubSpotWritePort {
   archive(record: RecordRef): Promise<void>;
   createPropertyGroup(object: ObjectType, group: { name: string; label: string }): Promise<{ created: boolean }>;
   createProperty(object: ObjectType, property: PropertyDefinition): Promise<{ created: boolean }>;
+  archiveProperty(object: ObjectType, name: string): Promise<void>;
   ensurePipeline(
     object: 'deal' | 'ticket',
     spec: { label: string; stages: { label: string }[] },
