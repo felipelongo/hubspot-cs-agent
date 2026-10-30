@@ -4,17 +4,22 @@ import { setupPortal } from './services.js';
 
 const SEEDED_OBJECTS: ObjectType[] = ['company', 'contact', 'deal', 'ticket', 'note', 'email', 'meeting', 'call', 'task'];
 const ID_PROPERTY = 'seed_external_id';
+const OWNER_PROPERTY = 'hubspot_owner_id';
 
 export async function seedHubSpot(hubspot: HubSpotPort, portal: PortalConfig, database: SeedDatabase): Promise<string> {
+  const mapped = await mapFixtureOwners(hubspot, database.owners);
   const setup = await setupPortal(hubspot, portal);
   const ids = new Map<string, string>();
-  const companies = await upsert(hubspot, 'company', database.companies, ids);
-  const contacts = await upsert(hubspot, 'contact', database.contacts, ids);
-  const deals = await upsert(hubspot, 'deal', database.deals, ids);
-  const tickets = await upsert(hubspot, 'ticket', database.tickets, ids);
+  const companies = await upsert(hubspot, 'company', rewriteOwnerIds(database.companies, mapped.ids), ids);
+  const contacts = await upsert(hubspot, 'contact', rewriteOwnerIds(database.contacts, mapped.ids), ids);
+  const deals = await upsert(hubspot, 'deal', rewriteOwnerIds(database.deals, mapped.ids), ids);
+  const tickets = await upsert(hubspot, 'ticket', rewriteOwnerIds(database.tickets, mapped.ids), ids);
   const activityCounts: Record<string, number> = {};
   for (const object of ['note', 'email', 'meeting', 'call'] as const) {
-    const rows = database.activities.filter((activity) => activity.object === object);
+    const rows = rewriteOwnerIds(
+      database.activities.filter((activity) => activity.object === object),
+      mapped.ids,
+    );
     const written = await upsert(hubspot, object, rows, ids);
     activityCounts[object] = written.length;
   }
@@ -27,6 +32,7 @@ export async function seedHubSpot(hubspot: HubSpotPort, portal: PortalConfig, da
   return [
     `Setup created ${setup.created.length}, unchanged ${setup.unchanged.length}, findings ${setup.findings.length}.`,
     ...setup.findings.map((finding) => `  finding: ${finding}`),
+    `Owners: ${mapped.matched} matched by email, ${mapped.fallback} fell back to the token's user.`,
     `Upserted companies ${companies.length}, contacts ${contacts.length}, deals ${deals.length}, tickets ${tickets.length}, activities ${activityTotal}.`,
     `Associations ${associations}.`,
   ].join('\n');
@@ -94,6 +100,54 @@ async function searchSeeded(hubspot: HubSpotPort, object: ObjectType): Promise<C
     after = page.after;
   } while (after);
   return results;
+}
+
+async function mapFixtureOwners(
+  hubspot: HubSpotPort,
+  owners: SeedDatabase['owners'],
+): Promise<{ ids: Map<string, string>; matched: number; fallback: number }> {
+  const portalOwners = await hubspot.listOwners();
+  // A static-auth token has no user endpoint, so the token's user is the first owner listOwners returns.
+  const tokenUser = portalOwners[0];
+  if (!tokenUser) {
+    throw new Error(
+      'HubSpot returned no owners. The access token needs the crm.objects.owners.read scope. See docs/hubspot/scopes.md.',
+    );
+  }
+  const byEmail = new Map<string, string>();
+  for (const owner of portalOwners) {
+    const email = owner.email.trim().toLowerCase();
+    if (!email || byEmail.has(email)) continue;
+    byEmail.set(email, owner.id);
+  }
+
+  const ids = new Map<string, string>();
+  let matched = 0;
+  let fallback = 0;
+  for (const owner of owners) {
+    const realId = byEmail.get(owner.email.trim().toLowerCase());
+    if (realId) {
+      ids.set(owner.id, realId);
+      matched += 1;
+    } else {
+      ids.set(owner.id, tokenUser.id);
+      fallback += 1;
+    }
+  }
+  return { ids, matched, fallback };
+}
+
+function rewriteOwnerIds<T extends { properties: Record<string, string> }>(
+  rows: T[],
+  ids: Map<string, string>,
+): T[] {
+  return rows.map((row) => {
+    const current = row.properties[OWNER_PROPERTY];
+    if (!current) return row;
+    const mapped = ids.get(current);
+    if (!mapped || mapped === current) return row;
+    return { ...row, properties: { ...row.properties, [OWNER_PROPERTY]: mapped } };
+  });
 }
 
 function resolveRef(ids: Map<string, string>, record: RecordRef): RecordRef {
