@@ -75,6 +75,9 @@ export interface ModelBlock {
   id?: string;
   name?: string;
   input?: unknown;
+  thinking?: string;
+  signature?: string;
+  data?: string;
 }
 
 export interface ModelResponse {
@@ -102,13 +105,7 @@ export function createLlm(env: NodeJS.ProcessEnv = process.env): LlmPort {
       stream: false,
     });
     return {
-      content: message.content.map((block) => ({
-        type: block.type,
-        text: block.type === 'text' ? block.text : undefined,
-        id: block.type === 'tool_use' ? block.id : undefined,
-        name: block.type === 'tool_use' ? block.name : undefined,
-        input: block.type === 'tool_use' ? block.input : undefined,
-      })),
+      content: message.content.map(toModelBlock),
       stop_reason: message.stop_reason,
       usage: {
         input_tokens: message.usage?.input_tokens,
@@ -243,11 +240,45 @@ async function runToolLoop(input: {
       });
     }
     if (steps >= input.maxSteps) break;
-    messages.push({ role: 'assistant', content: response.content });
+    messages.push({ role: 'assistant', content: response.content.map(echoBlock) });
     messages.push({ role: 'user', content: results });
   }
 
   return { text, inputTokens, outputTokens, model, toolCalls };
+}
+
+function toModelBlock(block: Anthropic.ContentBlock): ModelBlock {
+  switch (block.type) {
+    case 'thinking':
+      return { type: 'thinking', thinking: block.thinking, signature: block.signature };
+    case 'redacted_thinking':
+      return { type: 'redacted_thinking', data: block.data };
+    case 'tool_use':
+      return { type: 'tool_use', id: block.id, name: block.name, input: block.input };
+    case 'text':
+      return { type: 'text', text: block.text };
+  }
+}
+
+function echoBlock(block: ModelBlock): Record<string, unknown> {
+  if (block.type === 'thinking') return withoutUndefined({ type: 'thinking', thinking: block.thinking, signature: block.signature });
+  if (block.type === 'redacted_thinking') return withoutUndefined({ type: 'redacted_thinking', data: block.data });
+  if (block.type === 'tool_use') return withoutUndefined({ type: 'tool_use', id: block.id, name: block.name, input: block.input });
+  if (block.type === 'text') return withoutUndefined({ type: 'text', text: block.text });
+  return withoutUndefined({
+    type: block.type,
+    text: block.text,
+    id: block.id,
+    name: block.name,
+    input: block.input,
+    thinking: block.thinking,
+    signature: block.signature,
+    data: block.data,
+  });
+}
+
+function withoutUndefined(block: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(block).filter(([, value]) => value !== undefined));
 }
 
 function readJson(text: string): { ok: true; value: unknown } | { ok: false; error: string } {

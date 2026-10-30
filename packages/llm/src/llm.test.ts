@@ -245,4 +245,74 @@ describe('createLlm', () => {
     ).rejects.toThrow(/QsrPrep/);
     expect(stuck).toHaveBeenCalledTimes(2);
   });
+
+  it('sends a thinking block back with thinking and signature on the next tool step', async () => {
+    const valid = {
+      experimental: true,
+      headline: 'Quarterly review',
+      sections: [{ title: 'Account', bullets: [{ text: 'One section.', citations: ['hubspot:company:co-1'] }] }],
+    };
+    const create = vi
+      .fn()
+      .mockResolvedValueOnce({
+        content: [
+          {
+            type: 'thinking',
+            thinking: 'Read the company record before answering.',
+            signature: 'sig-1',
+            text: undefined,
+            id: undefined,
+            name: undefined,
+            input: undefined,
+            data: undefined,
+          },
+          {
+            type: 'redacted_thinking',
+            data: 'redacted-payload',
+            text: undefined,
+            thinking: undefined,
+            signature: undefined,
+          },
+          {
+            type: 'tool_use',
+            id: 'tool-1',
+            name: 'hubspot_read_record',
+            input: { object: 'company', id: 'co-1' },
+            text: undefined,
+            thinking: undefined,
+            signature: undefined,
+            data: undefined,
+          },
+        ],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 3, output_tokens: 1 },
+        model: 'strong-from-env',
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: 'text', text: JSON.stringify(valid) }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 4, output_tokens: 2 },
+        model: 'strong-from-env',
+      });
+    const llm = createAnthropicLlm(create, { LLM_MODEL_STRONG: 'strong-from-env' });
+    const result = await llm.generate({
+      messages: [{ role: 'user', content: 'Review the account.' }],
+      schema_name: 'QsrPrep',
+      tier: 'strong',
+      on_tool: async () => ({ name: 'Northwind' }),
+    });
+
+    const assistant = create.mock.calls[1]?.[0].messages.find((message: { role: string }) => message.role === 'assistant');
+    expect(assistant.content).toEqual([
+      { type: 'thinking', thinking: 'Read the company record before answering.', signature: 'sig-1' },
+      { type: 'redacted_thinking', data: 'redacted-payload' },
+      { type: 'tool_use', id: 'tool-1', name: 'hubspot_read_record', input: { object: 'company', id: 'co-1' } },
+    ]);
+    expect(assistant.content.map((block: object) => Object.keys(block))).toEqual([
+      ['type', 'thinking', 'signature'],
+      ['type', 'data'],
+      ['type', 'id', 'name', 'input'],
+    ]);
+    expect(QsrPrepSchema.parse(result.output).headline).toBe('Quarterly review');
+  });
 });
