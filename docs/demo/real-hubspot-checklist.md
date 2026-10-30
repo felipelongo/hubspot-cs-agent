@@ -26,7 +26,7 @@ HubSpot often refuses to create users from the API. The seed maps every owner to
    If the Renewals pipeline is missing, the findings list names it. Create it, or let the seed step create it.
 
 3. **Seed.** `pnpm cs seed --target hubspot`  
-   Expect: a summary of companies, contacts, deals, tickets, and activities. Emails are `@example.com`.  
+   Expect: a summary of companies, contacts, deals, tickets, and activities. Emails are `@example.org`. Setup reports whether it archived `seats_purchased`, `seats_active`, and `last_login_at`.  
    Run it again. Expect: upserts, not duplicates. Records carry `seed_external_id`.
 
 4. **Shadow sweep.** `pnpm cs sweep renewal-risk-sweep --mode shadow --limit 5`  

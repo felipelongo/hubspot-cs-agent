@@ -1,6 +1,6 @@
 # CS agent
 
-A Customer Success agent that reads a HubSpot account, scores renewal risk, and proposes the next actions. The model can only propose. A separate commit step is the only code that writes to HubSpot, and only after the approval matches the exact payload.
+A Customer Success agent for Harborboard Donor Engagement, a fictional program sold to nonprofits. It reads one client in HubSpot, scores renewal risk from supporter follow-up and the gift guarantee, and proposes the next actions. The model can only propose. A separate commit step is the only code that writes to HubSpot, and only after the approval matches the exact payload.
 
 `pnpm i && pnpm demo:mock` runs the whole renewal sweep with no API keys. Low-risk updates are written to an in-memory HubSpot. Drafted emails wait in a console. A second sweep writes nothing new.
 

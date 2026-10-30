@@ -22,7 +22,7 @@ Setup creates the `cs_agent` group and the company health fields. It has to read
 | Scope | Why |
 | --- | --- |
 | `crm.schemas.companies.read` | See whether the company properties already exist. |
-| `crm.schemas.companies.write` | Create the company group and properties. |
+| `crm.schemas.companies.write` | Create the company group and properties. Setup also archives the deprecated custom properties `seats_purchased`, `seats_active`, and `last_login_at` when they exist and are not HubSpot-defined or read-only. |
 | `crm.schemas.contacts.read` | See contact property definitions before seed adds any. |
 | `crm.schemas.contacts.write` | Create contact properties seed needs. |
 | `crm.schemas.deals.read` | See deal property definitions and the renewal pipeline. |
