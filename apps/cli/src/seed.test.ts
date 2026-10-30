@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { loadPortalConfig } from '@cs-agent/config';
+import { loadPortalConfig, repoRoot } from '@cs-agent/config';
 import type {
   CrmRecord,
   HubSpotOwner,
@@ -9,6 +11,7 @@ import type {
   Pipeline,
   PropertyDefinition,
   RecordRef,
+  SearchFilter,
   SearchRequest,
   SeedDatabase,
   UpsertInput,
@@ -987,3 +990,233 @@ class IndustryPortal extends StrictPortal {
     return super.batchUpsert(object, rows);
   }
 }
+
+/**
+ * Batch upsert results come back reversed and rotated, and each record's HubSpot
+ * id is independent of seed_external_id. Input order must not be used to pair them.
+ */
+class ShuffledUpsertPortal implements HubSpotPort {
+  readonly links: { from: RecordRef; to: RecordRef }[] = [];
+  private seq = 0;
+  private readonly records = new Map<string, { object: ObjectType; id: string; properties: Record<string, string> }>();
+  private readonly propertyDefs = new Map<string, PropertyDefinition>();
+  private readonly groups = new Set<string>();
+  private readonly dealPipelines: Pipeline[] = [];
+  private readonly ticketPipelines: Pipeline[] = [
+    {
+      id: '0',
+      label: 'Support',
+      stages: [
+        { id: '1', label: 'New' },
+        { id: '4', label: 'Closed' },
+      ],
+    },
+  ];
+
+  constructor(private readonly owners: HubSpotOwner[]) {}
+
+  idFor(object: ObjectType, externalId: string): string | undefined {
+    for (const record of this.records.values()) {
+      if (record.object === object && record.properties.seed_external_id === externalId) return record.id;
+    }
+    return undefined;
+  }
+
+  async getRecord(): Promise<CrmRecord | null> {
+    return null;
+  }
+
+  async batchRead(): Promise<CrmRecord[]> {
+    return [];
+  }
+
+  async search(object: ObjectType, request: SearchRequest): Promise<{ results: CrmRecord[]; after?: string }> {
+    const matched = [...this.records.values()].filter(
+      (record) => record.object === object && (request.filters ?? []).every((filter) => this.matches(record.properties, filter)),
+    );
+    const offset = request.after ? Number(request.after) : 0;
+    const start = Number.isFinite(offset) && offset > 0 ? offset : 0;
+    const limit = request.limit ?? matched.length;
+    const slice = matched.slice(start, start + limit);
+    const next = start + slice.length < matched.length ? String(start + slice.length) : undefined;
+    return { results: slice.map((record) => this.toRecord(record, request.properties)), after: next };
+  }
+
+  async listAssociations(): Promise<RecordRef[]> {
+    return [];
+  }
+
+  async listProperties(object: ObjectType): Promise<PropertyDefinition[]> {
+    const found: PropertyDefinition[] = [];
+    for (const [key, property] of this.propertyDefs) {
+      if (key.startsWith(`${object}:`)) found.push(property);
+    }
+    return found;
+  }
+
+  async getProperty(object: ObjectType, name: string): Promise<PropertyDefinition | null> {
+    return this.propertyDefs.get(`${object}:${name}`) ?? null;
+  }
+
+  async listOwners(): Promise<HubSpotOwner[]> {
+    return this.owners.map((owner) => ({ ...owner }));
+  }
+
+  async listPipelines(object: 'deal' | 'ticket'): Promise<Pipeline[]> {
+    const pipelines = object === 'deal' ? this.dealPipelines : this.ticketPipelines;
+    return pipelines.map((pipeline) => ({ ...pipeline, stages: pipeline.stages.map((stage) => ({ ...stage })) }));
+  }
+
+  async findMarker(): Promise<RecordRef[]> {
+    return [];
+  }
+
+  async createRecord(object: ObjectType, write: ObjectWrite): Promise<CrmRecord> {
+    const external = write.properties.seed_external_id;
+    if (!external) throw new Error(`create ${object} without seed_external_id`);
+    return this.upsertOne(object, 'seed_external_id', external, write.properties);
+  }
+
+  async updateRecord(record: RecordRef, properties: Record<string, string>): Promise<CrmRecord> {
+    const existing = this.records.get(`${record.object}:${record.id}`);
+    if (!existing) throw new Error(`missing ${record.object} ${record.id}`);
+    existing.properties = { ...existing.properties, ...properties };
+    return this.toRecord(existing);
+  }
+
+  async batchUpsert(object: ObjectType, rows: UpsertInput[]): Promise<CrmRecord[]> {
+    const saved = rows.map((row) => this.upsertOne(object, row.idProperty, row.id, row.properties));
+    return disorder(saved);
+  }
+
+  async associate(from: RecordRef, to: RecordRef): Promise<void> {
+    this.links.push({ from: { ...from }, to: { ...to } });
+  }
+
+  async archive(): Promise<void> {}
+
+  async createPropertyGroup(object: ObjectType, group: { name: string; label: string }): Promise<{ created: boolean }> {
+    const key = `${object}:${group.name}`;
+    if (this.groups.has(key)) return { created: false };
+    this.groups.add(key);
+    return { created: true };
+  }
+
+  async createProperty(object: ObjectType, property: PropertyDefinition): Promise<{ created: boolean }> {
+    const key = `${object}:${property.name}`;
+    if (this.propertyDefs.has(key)) return { created: false };
+    this.propertyDefs.set(key, property);
+    return { created: true };
+  }
+
+  async ensurePipeline(
+    object: 'deal' | 'ticket',
+    spec: { label: string; stages: { label: string }[] },
+  ): Promise<{ pipelineId: string; created: boolean; missingStages: string[] }> {
+    const list = object === 'deal' ? this.dealPipelines : this.ticketPipelines;
+    const existing = list.find((pipeline) => pipeline.label === spec.label);
+    if (existing) {
+      const labels = new Set(existing.stages.map((stage) => stage.label));
+      return {
+        pipelineId: existing.id,
+        created: false,
+        missingStages: spec.stages.map((stage) => stage.label).filter((label) => !labels.has(label)),
+      };
+    }
+    const pipeline: Pipeline = {
+      id: object === 'deal' ? 'pipe-renewals' : '0',
+      label: spec.label,
+      stages: spec.stages.map((stage, index) => ({ id: `stg-${index}`, label: stage.label })),
+    };
+    list.push(pipeline);
+    return { pipelineId: pipeline.id, created: true, missingStages: [] };
+  }
+
+  private upsertOne(object: ObjectType, idProperty: string, id: string, properties: Record<string, string>): CrmRecord {
+    const external = properties[idProperty] || id;
+    const existing = this.findByExternal(object, external);
+    const next = { ...properties, [idProperty]: id };
+    if (existing) {
+      existing.properties = { ...existing.properties, ...next };
+      return this.toRecord(existing);
+    }
+    this.seq += 1;
+    const stored = { object, id: `hs-${object}-${this.seq}`, properties: next };
+    this.records.set(`${object}:${stored.id}`, stored);
+    return this.toRecord(stored);
+  }
+
+  private findByExternal(
+    object: ObjectType,
+    external: string,
+  ): { object: ObjectType; id: string; properties: Record<string, string> } | undefined {
+    for (const record of this.records.values()) {
+      if (record.object === object && record.properties.seed_external_id === external) return record;
+    }
+    return undefined;
+  }
+
+  private toRecord(
+    stored: { object: ObjectType; id: string; properties: Record<string, string> },
+    properties?: string[],
+  ): CrmRecord {
+    if (!properties) return { ref: { object: stored.object, id: stored.id }, properties: { ...stored.properties } };
+    const picked: Record<string, string | null> = {};
+    for (const name of properties) picked[name] = stored.properties[name] ?? null;
+    return { ref: { object: stored.object, id: stored.id }, properties: picked };
+  }
+
+  private matches(properties: Record<string, string>, filter: SearchFilter): boolean {
+    const value = properties[filter.property];
+    if (filter.operator === 'IN') return value != null && (filter.values ?? []).includes(value);
+    if (filter.operator === 'EQ') return value === filter.value;
+    if (filter.operator === 'HAS_PROPERTY') return value != null && value !== '';
+    return false;
+  }
+}
+
+function disorder<T>(items: T[]): T[] {
+  if (items.length < 2) return [...items];
+  const reversed = [...items].reverse();
+  const pivot = Math.floor(reversed.length / 2);
+  const shuffled = [...reversed.slice(pivot), ...reversed.slice(0, pivot)];
+  if (shuffled.every((item, index) => item === items[index])) return reversed;
+  return shuffled;
+}
+
+describe('seedHubSpot when batch upsert results are not in input order', () => {
+  it('associates every fixture row with the HubSpot id that carries that seed_external_id', async () => {
+    const fixture = JSON.parse(readFileSync(resolve(repoRoot, 'fixtures/seed.json'), 'utf8')) as SeedDatabase;
+    const hubspot = new ShuffledUpsertPortal(
+      fixture.owners.map((owner) => ({
+        id: owner.id,
+        email: owner.email,
+        firstName: owner.first_name,
+        lastName: owner.last_name,
+      })),
+    );
+
+    await seedHubSpot(hubspot, portal, fixture);
+
+    const missing: string[] = [];
+    for (const link of fixture.associations) {
+      const fromId = hubspot.idFor(link.from.object, link.from.id);
+      const toId = hubspot.idFor(link.to.object, link.to.id);
+      const label = `${link.from.object}:${link.from.id} -> ${link.to.object}:${link.to.id}`;
+      if (!fromId || !toId || fromId === link.from.id || toId === link.to.id) {
+        missing.push(`${label} (HubSpot id was not assigned)`);
+        continue;
+      }
+      const matched = hubspot.links.some(
+        (edge) =>
+          edge.from.object === link.from.object &&
+          edge.from.id === fromId &&
+          edge.to.object === link.to.object &&
+          edge.to.id === toId,
+      );
+      if (!matched) missing.push(label);
+    }
+    expect(hubspot.links).toHaveLength(fixture.associations.length);
+    expect(missing).toEqual([]);
+  });
+});

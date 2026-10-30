@@ -168,7 +168,7 @@ async function upsert(
   ids: Map<string, string>,
 ): Promise<CrmRecord[]> {
   const inputs: UpsertInput[] = rows.map((row) => {
-    const external = row.properties[ID_PROPERTY] || row.id;
+    const external = rowExternalId(row);
     return {
       idProperty: ID_PROPERTY,
       id: external,
@@ -179,9 +179,8 @@ async function upsert(
   for (let index = 0; index < inputs.length; index += 100) {
     const chunk = inputs.slice(index, index + 100);
     const records = await hubspot.batchUpsert(object, chunk);
-    records.forEach((record, offset) => {
-      remember(ids, object, record, rows[index + offset]);
-    });
+    const rowsByExternal = indexRows(rows.slice(index, index + chunk.length));
+    for (const record of records) remember(ids, object, record, rowsByExternal);
     written.push(...records);
   }
   return written;
@@ -259,21 +258,22 @@ async function writeActivities(
   const written: CrmRecord[] = [];
   for (let index = 0; index < rows.length; index += SEARCH_LIMIT) {
     const chunk = rows.slice(index, index + SEARCH_LIMIT);
-    const externalIds = chunk.map((row) => row.properties[ID_PROPERTY] || row.id);
+    const rowsByExternal = indexRows(chunk);
+    const externalIds = chunk.map((row) => rowExternalId(row));
     const found = await searchByExternalIds(hubspot, object, externalIds);
     const byExternal = new Map<string, CrmRecord>();
     for (const record of found) {
-      const external = record.properties[ID_PROPERTY];
-      if (external && !byExternal.has(external)) byExternal.set(external, record);
+      const external = returnedExternalId(object, record);
+      if (!byExternal.has(external)) byExternal.set(external, record);
     }
     for (const row of chunk) {
-      const external = row.properties[ID_PROPERTY] || row.id;
+      const external = rowExternalId(row);
       const properties = { ...row.properties, [ID_PROPERTY]: external };
       const existing = byExternal.get(external);
       const record = existing
         ? await hubspot.updateRecord(existing.ref, properties)
         : await hubspot.createRecord(object, { properties });
-      remember(ids, object, record, row);
+      remember(ids, object, record, rowsByExternal);
       written.push(record);
     }
   }
@@ -304,18 +304,42 @@ async function searchByExternalIds(
   return results;
 }
 
+function rowExternalId(row: { id: string; properties: Record<string, string> }): string {
+  return row.properties[ID_PROPERTY] || row.id;
+}
+
+function indexRows(
+  rows: { id: string; properties: Record<string, string> }[],
+): Map<string, { id: string; properties: Record<string, string> }> {
+  return new Map(rows.map((row) => [rowExternalId(row), row]));
+}
+
+function returnedExternalId(object: ObjectType, record: CrmRecord): string {
+  const external = record.properties[ID_PROPERTY];
+  if (typeof external !== 'string' || external.length === 0) {
+    throw new Error(
+      `HubSpot returned ${object} ${record.ref.id || '(no id)'} without ${ID_PROPERTY}. Refusing to match it to a fixture row by position.`,
+    );
+  }
+  return external;
+}
+
 function remember(
   ids: Map<string, string>,
   object: ObjectType,
   record: CrmRecord,
-  source: { id: string; properties: Record<string, string> } | undefined,
+  rowsByExternal: ReadonlyMap<string, { id: string }>,
 ): void {
-  const external = record.properties[ID_PROPERTY] || source?.properties[ID_PROPERTY] || source?.id;
-  if (external) {
-    ids.set(`${object}:${external}`, record.ref.id);
-    ids.set(external, record.ref.id);
+  const external = returnedExternalId(object, record);
+  const source = rowsByExternal.get(external);
+  if (!source) {
+    throw new Error(
+      `HubSpot returned ${object} ${record.ref.id} with ${ID_PROPERTY} "${external}", which is not in this seed batch.`,
+    );
   }
-  if (source) ids.set(`${object}:${source.id}`, record.ref.id);
+  ids.set(`${object}:${external}`, record.ref.id);
+  ids.set(external, record.ref.id);
+  ids.set(`${object}:${source.id}`, record.ref.id);
   ids.set(`${object}:${record.ref.id}`, record.ref.id);
 }
 
