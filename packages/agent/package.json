@@ -1,0 +1,13 @@
+{
+  "name": "@cs-agent/agent",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@cs-agent/core": "workspace:*",
+    "@cs-agent/config": "workspace:*",
+    "@cs-agent/procedures": "workspace:*",
+    "@cs-agent/policy": "workspace:*"
+  }
+}
