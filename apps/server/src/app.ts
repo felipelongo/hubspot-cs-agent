@@ -233,9 +233,9 @@ export function createApp(deps: AppDeps): Hono {
 }
 
 export function startServer(deps: AppDeps, port?: number): void {
-  const chosen = port ?? Number(process.env.PORT || 3000);
+  const chosen = port ?? Number(process.env.PORT || 8787);
   const app = createApp({ ...deps, password: deps.password || process.env.CONSOLE_PASSWORD || 'demo' });
-  serve({ fetch: app.fetch, port: Number.isFinite(chosen) ? chosen : 3000 }, (info) => {
+  serve({ fetch: app.fetch, port: Number.isFinite(chosen) ? chosen : 8787 }, (info) => {
     console.log(`Console listening on http://localhost:${info.port}`);
   });
 }

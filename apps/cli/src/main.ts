@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { systemClock, type RunMode } from '@cs-agent/core';
-import { loadScoringRules } from '@cs-agent/config';
+import { loadDotEnv, loadScoringRules } from '@cs-agent/config';
 import { decideApproval, editProposal } from '@cs-agent/approvals';
 import { runWorkflow, type WorkflowName } from '@cs-agent/workflows';
 import { startServer } from '../../server/src/index.js';
@@ -178,7 +178,7 @@ async function backtest(since: string | undefined): Promise<void> {
 
 async function serve(flags: Map<string, string | boolean>, env: NodeJS.ProcessEnv): Promise<void> {
   const runtime = await createRuntime(env);
-  const port = numberFlag(flags, 'port') ?? Number(env.PORT || 3000);
+  const port = numberFlag(flags, 'port') ?? Number(env.PORT || 8787);
   startServer(
     {
       ledger: runtime.ledger,
@@ -200,6 +200,7 @@ function readMode(value: string): RunMode {
 const entry = process.argv[1] ? resolve(process.argv[1]) : '';
 const self = fileURLToPath(import.meta.url);
 if (entry === self) {
+  loadDotEnv();
   main().catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);

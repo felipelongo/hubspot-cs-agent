@@ -1,7 +1,7 @@
 import { mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { repoRoot } from '@cs-agent/config';
+import { loadDotEnv, repoRoot } from '@cs-agent/config';
 import { decideApproval } from '@cs-agent/approvals';
 import { runWorkflow } from '@cs-agent/workflows';
 import { loadRuntimeConfig, systemClock } from './runtime.js';
@@ -103,6 +103,7 @@ function withoutKeys(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 
 const entry = process.argv[1] ? resolve(process.argv[1]) : '';
 if (entry === fileURLToPath(import.meta.url)) {
+  loadDotEnv();
   runDemo().catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
